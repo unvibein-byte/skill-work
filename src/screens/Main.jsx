@@ -9,6 +9,7 @@ import AnalyticsTab from './tabs/AnalyticsTab';
 import WithdrawSheet from './tabs/WithdrawSheet';
 import AchievementsTab from './tabs/AchievementsTab';
 import { useLang } from '../i18n/LangContext';
+import LiveNotification from '../components/LiveNotification';
 
 /* ─── Language Toggle Button ─────────────────────────────────────────────── */
 const LangToggle = () => {
@@ -192,6 +193,9 @@ const MainInner = () => {
           </button>
         ))}
       </div>
+
+      {/* ── LIVE NOTIFICATIONS ── */}
+      <LiveNotification />
     </motion.div>
   );
 };

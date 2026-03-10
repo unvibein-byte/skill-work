@@ -9,10 +9,10 @@ const LiveNotification = () => {
     useEffect(() => {
         const triggerRandomNotification = () => {
             const name = NAMES[Math.floor(Math.random() * NAMES.length)];
-            // Generate realistic amounts: mostly ending in random digits like the screenshot 
-            const amount = Math.floor(Math.random() * 2000) + 600;
             const minutes = Math.floor(Math.random() * 8) + 1; // 1 to 8 mins ago
 
+            // Generate realistic amounts between 5000 and 8000
+            const amount = Math.floor(Math.random() * 3001) + 5000;
             setNotification({ name, amount, minutes, id: Date.now() });
 
             // Auto dismiss after 4 seconds
@@ -92,9 +92,9 @@ const LiveNotification = () => {
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
                             <div style={{ fontSize: '16px', color: 'white', whiteSpace: 'nowrap' }}>
                                 <span style={{ fontWeight: 800, fontFamily: "'Outfit', sans-serif" }}>{notification.name}</span>
-                                <span style={{ fontWeight: 500, color: 'rgba(255,255,255,0.7)', fontSize: '15px' }}> withdrew </span>
+                                <span style={{ fontWeight: 500, color: 'rgba(255,255,255,0.7)', fontSize: '15px' }}> withdraw </span>
                                 <span style={{ color: '#00e896', fontWeight: 800, fontFamily: "'Outfit', sans-serif" }}>
-                                    ₹{notification.amount.toLocaleString('en-IN')}
+                                    ₹{notification.amount?.toLocaleString('en-IN')}
                                 </span>
                             </div>
                             <div style={{ fontSize: '13px', color: 'rgba(255,255,255,0.5)', fontWeight: 500 }}>

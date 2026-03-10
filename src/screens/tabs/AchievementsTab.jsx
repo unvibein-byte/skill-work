@@ -187,17 +187,6 @@ const AchievementsTab = ({ isPro }) => {
 
       <div style={{ padding: '0 16px', marginTop: -24 }}>
 
-        {/* ── REWARD EXPLANATION ── */}
-        <div className="card animate-fade-up" style={{ padding: '14px 16px', marginBottom: '14px', display: 'flex', alignItems: 'flex-start', gap: '12px', background: 'var(--green-light)', border: '1px solid var(--green-border)' }}>
-          <div style={{ fontSize: '24px', flexShrink: 0 }}>🎁</div>
-          <div>
-            <div style={{ fontSize: '13px', fontWeight: '800', color: 'var(--green-dark)', fontFamily: 'var(--font-display)', marginBottom: '4px' }}>How to Claim Rewards?</div>
-            <div style={{ fontSize: '11.5px', color: 'var(--text-secondary)', lineHeight: '1.5' }}>
-              Achievements unlock automatically! Any cash rewards for hitting milestones are added <strong>directly to your Total Balance</strong> on the Dashboard. Just keep completing tasks to unlock more badges.
-            </div>
-          </div>
-        </div>
-
         {/* ── STATS ROW ── */}
         <div className="card animate-fade-up" style={{ padding: 0, overflow: 'hidden', marginBottom: 14 }}>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr' }}>
