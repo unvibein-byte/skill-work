@@ -154,8 +154,20 @@ const BillingsTab = ({ isPro, onUpgrade, onDowngrade }) => {
               ))}
             </div>
 
+            {/* Refund highlight badge */}
+            <div style={{
+              display: 'flex', alignItems: 'center', gap: 10,
+              background: 'rgba(0,195,126,0.12)', border: '1px solid rgba(0,195,126,0.3)',
+              borderRadius: 12, padding: '10px 14px', marginBottom: 14,
+            }}>
+              <span style={{ fontSize: 20, flexShrink: 0 }}>💰</span>
+              <span style={{ fontSize: 13, fontWeight: 700, color: '#4ade80', lineHeight: 1.5 }}>
+                Security deposit amount is <span style={{ textDecoration: 'underline' }}>refundable</span> after your first withdrawal.
+              </span>
+            </div>
+
             {/* Info text */}
-            <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.65)', lineHeight: 1.7, marginBottom: 22 }}>
+            <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.55)', lineHeight: 1.7, marginBottom: 22 }}>
               Security amount is collected as a refundable security deposit and is adjusted as part of payout as per Refund Policy. Refund and payout are subject to platform policies and user compliance.
             </p>
 
