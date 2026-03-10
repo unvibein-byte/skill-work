@@ -197,16 +197,8 @@ const BillingsTab = ({ isPro, onUpgrade, onDowngrade }) => {
                   <span style={{ fontSize: 11, fontWeight: 800, background: 'linear-gradient(135deg,#ef4444,#f97316)', color: 'white', padding: '2px 10px', borderRadius: 100, animation: 'badgeBounce 1.5s ease infinite' }}>80% OFF</span>
                 </div>
               )}
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
-                <div style={{ fontSize: 50, fontWeight: 900, fontFamily: 'var(--font-display)', letterSpacing: '-2px', color: isViewingPro ? '#7F56D9' : 'var(--text-primary)', lineHeight: 1, transition: 'all 0.3s' }}>
-                  {isViewingPro ? '₹399' : 'FREE'}
-                </div>
-                {isViewingPro && (
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 14 }}>
-                    <span style={{ fontSize: 18, fontWeight: 600, color: '#e11d48', fontFamily: 'var(--font-sans)' }}>(Refundable)</span>
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#64748b" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="M12 16v-4"></path><path d="M12 8h.01"></path></svg>
-                  </div>
-                )}
+              <div style={{ fontSize: 50, fontWeight: 900, fontFamily: 'var(--font-display)', letterSpacing: '-2px', color: isViewingPro ? '#7F56D9' : 'var(--text-primary)', lineHeight: 1, transition: 'all 0.3s' }}>
+                {isViewingPro ? '₹399' : 'FREE'}
               </div>
               <div style={{ display: 'inline-flex', alignItems: 'center', gap: 5, background: '#f0fdf4', border: '1px solid var(--green-border)', borderRadius: 100, padding: '3px 12px', marginTop: 8 }}>
                 <span style={{ fontSize: 11, fontWeight: 800, color: 'var(--green)' }}>
