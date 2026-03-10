@@ -29,6 +29,7 @@ const WithdrawSheet = ({ balance = 0, onClose, onWithdraw }) => {
   })();
 
   const hasPayment = !!(upi || accNo);
+  const isPro = localStorage.getItem('sw_pro') === 'true';
 
   const [amount, setAmount] = useState('');
   const [method, setMethod] = useState(upi ? 'upi' : 'bank');
@@ -40,6 +41,7 @@ const WithdrawSheet = ({ balance = 0, onClose, onWithdraw }) => {
   // ── Validation ──
   const errors = [];
   if (!hasPayment) errors.push('⚠️ No payment method saved. Go to Settings → Bank/UPI first.');
+  else if (!isPro) errors.push('👑 You must upgrade to Premium plan to withdraw your earnings.');
   else if (completedCount < 35) errors.push(`⚠️ You must complete at least 35 tasks to withdraw (Current: ${completedCount}/35).`);
   else if (numAmt < MIN_WITHDRAW) errors.push(`⚠️ Minimum withdrawal is ₹${MIN_WITHDRAW}.`);
   else if (numAmt > balance) errors.push('⚠️ Amount exceeds your available balance.');
