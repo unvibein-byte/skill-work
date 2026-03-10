@@ -2,7 +2,7 @@ const translations = {
   en: {
     // ── Nav ──
     nav_home: 'HOME', nav_task: 'TASK', nav_refer: 'REFER', nav_setting: 'SETTING',
-    tab_dashboard: 'Dashboard', tab_task: 'Daily Task', tab_billings: 'Billings',
+    tab_dashboard: 'Dashboard', tab_task: 'Daily Task', tab_billings: 'Premium',
     tab_analytics: 'Analytics', tab_achievements: 'Achievements',
 
     // ── Header ──
@@ -184,7 +184,7 @@ const translations = {
   hi: {
     // ── Nav ──
     nav_home: 'होम', nav_task: 'कार्य', nav_refer: 'रेफर', nav_setting: 'सेटिंग',
-    tab_dashboard: 'डैशबोर्ड', tab_task: 'दैनिक कार्य', tab_billings: 'बिलिंग',
+    tab_dashboard: 'डैशबोर्ड', tab_task: 'दैनिक कार्य', tab_billings: 'प्रीमियम',
     tab_analytics: 'विश्लेषण', tab_achievements: 'उपलब्धियाँ',
 
     // ── Header ──

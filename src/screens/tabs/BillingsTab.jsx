@@ -16,21 +16,21 @@ const STYLE = `
 `;
 
 const FEATURES = [
-  { icon:'📋', label:'PDF Tasks / Day',   free:'15 tasks',  pro:'50 tasks',   hi:true  },
-  { icon:'💰', label:'Max Daily Earning', free:'₹1,500',   pro:'₹5,000',    hi:true  },
-  { icon:'📅', label:'Monthly Max',       free:'₹45,000',  pro:'₹1,50,000', hi:false },
-  { icon:'⚡', label:'Payout Speed',      free:'48 hours',  pro:'24 hours',  hi:false },
-  { icon:'🎯', label:'Task Priority',     free:'Standard',  pro:'Priority',  hi:false },
-  { icon:'🏷️', label:'Task Types',        free:'Basic',     pro:'All types', hi:false },
-  { icon:'🎁', label:'Bonus Tasks',       free:'—',         pro:'✓',         hi:false },
-  { icon:'🏦', label:'Support',          free:'Community', pro:'Dedicated', hi:false },
+  { icon: '📋', label: 'PDF Tasks / Day', free: '15 tasks', pro: '50 tasks', hi: true },
+  { icon: '💰', label: 'Max Daily Earning', free: '₹1,500', pro: '₹5,000', hi: true },
+  { icon: '📅', label: 'Monthly Max', free: '₹45,000', pro: '₹1,50,000', hi: false },
+  { icon: '⚡', label: 'Payout Speed', free: '48 hours', pro: '24 hours', hi: false },
+  { icon: '🎯', label: 'Task Priority', free: 'Standard', pro: 'Priority', hi: false },
+  { icon: '🏷️', label: 'Task Types', free: 'Basic', pro: 'All types', hi: false },
+  { icon: '🎁', label: 'Bonus Tasks', free: '—', pro: '✓', hi: false },
+  { icon: '🏦', label: 'Support', free: 'Community', pro: 'Dedicated', hi: false },
 ];
 
 const PERKS = [
-  { icon:'🚀', title:'3× More Tasks',   desc:'50 tasks/day vs 15 on Free — earn 3× more every day' },
-  { icon:'⚡', title:'Instant Payouts', desc:'Get your money in 24 hrs, not 48. Every rupee, faster.' },
-  { icon:'🎯', title:'Best Tasks First',desc:'Priority queue — you see high-paying tasks before others' },
-  { icon:'🎁', title:'Bonus Rewards',   desc:'Exclusive bonus tasks with premium rewards up to ₹500 each' },
+  { icon: '🚀', title: '3× More Tasks', desc: '50 tasks/day vs 15 on Free — earn 3× more every day' },
+  { icon: '⚡', title: 'Instant Payouts', desc: 'Get your money in 24 hrs, not 48. Every rupee, faster.' },
+  { icon: '🎯', title: 'Best Tasks First', desc: 'Priority queue — you see high-paying tasks before others' },
+  { icon: '🎁', title: 'Bonus Rewards', desc: 'Exclusive bonus tasks with premium rewards up to ₹500 each' },
 ];
 
 const TESTIMONIALS = [
@@ -109,9 +109,9 @@ const Ticker = () => {
 
 /* ─── Main Component ──────────────────────────────────────────────────────── */
 const BillingsTab = ({ isPro, onUpgrade, onDowngrade }) => {
-  const [activePlan,   setActivePlan]   = useState('pro'); // default to Pro to show the deal
-  const [showConfirm,  setShowConfirm]  = useState(false);
-  const [highlighted,  setHighlighted]  = useState(false);
+  const [activePlan, setActivePlan] = useState('pro'); // default to Pro to show the deal
+  const [showConfirm, setShowConfirm] = useState(false);
+  const [highlighted, setHighlighted] = useState(false);
 
   const isViewingPro = activePlan === 'pro';
 
@@ -125,11 +125,11 @@ const BillingsTab = ({ isPro, onUpgrade, onDowngrade }) => {
       <div style={{ position: 'relative', overflow: 'hidden', background: 'linear-gradient(160deg,#0D0D1A 0%,#1A1040 50%,#0D1F3C 100%)', padding: '28px 20px 96px' }}>
         {/* Floating particles */}
         {[
-          { emoji:'👑', top:12, left:16,  anim:'floatC 3s ease-in-out infinite',            fontSize:26 },
-          { emoji:'💰', top:20, right:20, anim:'floatA 4s ease-in-out infinite 0.5s',       fontSize:22 },
-          { emoji:'✨', top:55, left:30,  anim:'floatB 3.5s ease-in-out infinite 0.3s',     fontSize:18 },
-          { emoji:'💎', top:65, right:35, anim:'floatC 4.5s ease-in-out infinite 1s',       fontSize:16 },
-          { emoji:'🚀', top:40, right:10, anim:'floatA 5s ease-in-out infinite 0.8s',       fontSize:20 },
+          { emoji: '👑', top: 12, left: 16, anim: 'floatC 3s ease-in-out infinite', fontSize: 26 },
+          { emoji: '💰', top: 20, right: 20, anim: 'floatA 4s ease-in-out infinite 0.5s', fontSize: 22 },
+          { emoji: '✨', top: 55, left: 30, anim: 'floatB 3.5s ease-in-out infinite 0.3s', fontSize: 18 },
+          { emoji: '💎', top: 65, right: 35, anim: 'floatC 4.5s ease-in-out infinite 1s', fontSize: 16 },
+          { emoji: '🚀', top: 40, right: 10, anim: 'floatA 5s ease-in-out infinite 0.8s', fontSize: 20 },
         ].map((p, i) => (
           <div key={i} style={{ position: 'absolute', top: `${p.top}%`, left: p.left ? p.left : undefined, right: p.right ? p.right : undefined, fontSize: p.fontSize, animation: p.anim, opacity: 0.55, pointerEvents: 'none' }}>
             {p.emoji}
@@ -137,8 +137,8 @@ const BillingsTab = ({ isPro, onUpgrade, onDowngrade }) => {
         ))}
 
         {/* Glow orbs */}
-        <div style={{ position:'absolute', width:200, height:200, borderRadius:'50%', background:'radial-gradient(circle,rgba(127,86,217,0.4) 0%,transparent 70%)', top:-60, right:-40 }} />
-        <div style={{ position:'absolute', width:160, height:160, borderRadius:'50%', background:'radial-gradient(circle,rgba(0,195,126,0.3) 0%,transparent 70%)', bottom:-40, left:-20 }} />
+        <div style={{ position: 'absolute', width: 200, height: 200, borderRadius: '50%', background: 'radial-gradient(circle,rgba(127,86,217,0.4) 0%,transparent 70%)', top: -60, right: -40 }} />
+        <div style={{ position: 'absolute', width: 160, height: 160, borderRadius: '50%', background: 'radial-gradient(circle,rgba(0,195,126,0.3) 0%,transparent 70%)', bottom: -40, left: -20 }} />
 
         <div style={{ position: 'relative', zIndex: 1, textAlign: 'center' }}>
           <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 100, padding: '6px 14px', marginBottom: 14, backdropFilter: 'blur(10px)' }}>
@@ -202,7 +202,7 @@ const BillingsTab = ({ isPro, onUpgrade, onDowngrade }) => {
               </div>
               <div style={{ display: 'inline-flex', alignItems: 'center', gap: 5, background: '#f0fdf4', border: '1px solid var(--green-border)', borderRadius: 100, padding: '3px 12px', marginTop: 8 }}>
                 <span style={{ fontSize: 11, fontWeight: 800, color: 'var(--green)' }}>
-                  🕊️ {isViewingPro ? 'One-time · Lifetime access' : 'Free Forever · No billing'}
+                  🕊️ {isViewingPro ? 'One-time · Lifetime access' : 'Free Forever · No charges'}
                 </span>
               </div>
               <div style={{ marginTop: 10, display: 'inline-flex', alignItems: 'center', gap: 8, background: isViewingPro ? 'rgba(127,86,217,0.08)' : 'var(--green-light)', borderRadius: 100, padding: '6px 16px', border: `1px solid ${isViewingPro ? 'rgba(127,86,217,0.2)' : 'var(--green-border)'}` }}>
@@ -216,15 +216,15 @@ const BillingsTab = ({ isPro, onUpgrade, onDowngrade }) => {
             {/* Key stats */}
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 18 }}>
               {(isViewingPro ? [
-                { icon:'📋', val:'50',       label:'Tasks/day'  },
-                { icon:'💰', val:'₹5,000',   label:'Daily max'  },
-                { icon:'⚡', val:'24 hrs',   label:'Payout'     },
-                { icon:'🎯', val:'Priority', label:'Access'     },
+                { icon: '📋', val: '50', label: 'Tasks/day' },
+                { icon: '💰', val: '₹5,000', label: 'Daily max' },
+                { icon: '⚡', val: '24 hrs', label: 'Payout' },
+                { icon: '🎯', val: 'Priority', label: 'Access' },
               ] : [
-                { icon:'📋', val:'15',       label:'Tasks/day'  },
-                { icon:'💰', val:'₹1,500',   label:'Daily max'  },
-                { icon:'⚡', val:'48 hrs',   label:'Payout'     },
-                { icon:'🎯', val:'Standard', label:'Access'     },
+                { icon: '📋', val: '15', label: 'Tasks/day' },
+                { icon: '💰', val: '₹1,500', label: 'Daily max' },
+                { icon: '⚡', val: '48 hrs', label: 'Payout' },
+                { icon: '🎯', val: 'Standard', label: 'Access' },
               ]).map((s, i) => (
                 <div key={i} style={{ background: '#f8f9fc', borderRadius: 14, padding: '12px 10px', display: 'flex', alignItems: 'center', gap: 10, border: `1px solid ${isViewingPro ? 'rgba(127,86,217,0.12)' : 'var(--border-color)'}`, transition: 'all 0.3s' }}>
                   <div style={{ fontSize: 22 }}>{s.icon}</div>
@@ -240,24 +240,24 @@ const BillingsTab = ({ isPro, onUpgrade, onDowngrade }) => {
             {isViewingPro ? (
               isPro
                 ? <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, background: 'rgba(127,86,217,0.08)', border: '1.5px solid rgba(127,86,217,0.2)', borderRadius: 14, padding: '14px' }}>
-                    <span style={{ fontSize: 18 }}>✅</span>
-                    <span style={{ fontSize: 14, fontWeight: 700, color: '#7F56D9' }}>You're on Pro — All features active!</span>
-                  </div>
+                  <span style={{ fontSize: 18 }}>✅</span>
+                  <span style={{ fontSize: 14, fontWeight: 700, color: '#7F56D9' }}>You're on Pro — All features active!</span>
+                </div>
                 : <ShimmerButton onClick={onUpgrade}>
-                    👑 Upgrade to Pro — ₹399 Lifetime
-                  </ShimmerButton>
+                  👑 Upgrade to Pro — ₹399 Lifetime
+                </ShimmerButton>
             ) : (
               isPro
                 ? <button onClick={() => setShowConfirm(true)}
-                    style={{ width: '100%', padding: '14px', borderRadius: 14, background: 'transparent', border: '1.5px solid var(--border-color)', fontFamily: 'var(--font-sans)', fontWeight: 600, fontSize: 14, color: 'var(--text-secondary)', cursor: 'pointer', transition: 'all 0.2s' }}
-                    onMouseOver={e => { e.currentTarget.style.borderColor = 'var(--red)'; e.currentTarget.style.color = 'var(--red)'; }}
-                    onMouseOut={e => { e.currentTarget.style.borderColor = 'var(--border-color)'; e.currentTarget.style.color = 'var(--text-secondary)'; }}>
-                    Downgrade to Free Plan
-                  </button>
+                  style={{ width: '100%', padding: '14px', borderRadius: 14, background: 'transparent', border: '1.5px solid var(--border-color)', fontFamily: 'var(--font-sans)', fontWeight: 600, fontSize: 14, color: 'var(--text-secondary)', cursor: 'pointer', transition: 'all 0.2s' }}
+                  onMouseOver={e => { e.currentTarget.style.borderColor = 'var(--red)'; e.currentTarget.style.color = 'var(--red)'; }}
+                  onMouseOut={e => { e.currentTarget.style.borderColor = 'var(--border-color)'; e.currentTarget.style.color = 'var(--text-secondary)'; }}>
+                  Downgrade to Free Plan
+                </button>
                 : <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, background: 'var(--green-light)', border: '1.5px solid var(--green-border)', borderRadius: 14, padding: '14px' }}>
-                    <span style={{ fontSize: 18 }}>✅</span>
-                    <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--green)' }}>You're on Free — No cost</span>
-                  </div>
+                  <span style={{ fontSize: 18 }}>✅</span>
+                  <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--green)' }}>You're on Free — No cost</span>
+                </div>
             )}
           </div>
         </div>
