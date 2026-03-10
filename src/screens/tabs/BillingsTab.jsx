@@ -117,7 +117,7 @@ const BillingsTab = ({ isPro, onUpgrade, onDowngrade }) => {
   const [discountPct, setDiscountPct] = useState(null);   // null | number
   const [selectedRole, setSelectedRole] = useState(null); // null | 'student' | 'housewife'
 
-  const basePrice = 399;
+  const basePrice = 499;
   const discountedPrice = discountPct ? Math.round(basePrice - (basePrice * discountPct) / 100) : basePrice;
   const isViewingPro = activePlan === 'pro';
 
@@ -228,7 +228,7 @@ const BillingsTab = ({ isPro, onUpgrade, onDowngrade }) => {
           >
             {/* Price breakdown */}
             <div style={{ marginBottom: 20 }}>
-              <div style={{ fontSize: 20, fontWeight: 900, color: 'white', fontFamily: 'var(--font-display)', marginBottom: 14 }}>₹399</div>
+              <div style={{ fontSize: 20, fontWeight: 900, color: 'white', fontFamily: 'var(--font-display)', marginBottom: 14 }}>₹499</div>
               {[
                 { label: 'Security', val: '₹352.12' },
                 { label: 'Service charge 10%', val: '₹35.21' },
@@ -358,7 +358,7 @@ const BillingsTab = ({ isPro, onUpgrade, onDowngrade }) => {
                         <span style={{ fontSize: 22, textDecoration: 'line-through', color: 'rgba(127,86,217,0.4)', letterSpacing: '-1px' }}>₹{basePrice}</span>
                         {' '}₹{discountedPrice}
                       </>
-                      : '₹399'
+                      : '₹499'
                   ) : 'FREE'}
                 </div>
                 <div style={{ display: 'inline-flex', alignItems: 'center', gap: 5, background: '#f0fdf4', border: '1px solid var(--green-border)', borderRadius: 100, padding: '3px 12px', marginTop: 8 }}>
@@ -425,7 +425,7 @@ const BillingsTab = ({ isPro, onUpgrade, onDowngrade }) => {
                   </div>
                   : <>
                     <ShimmerButton onClick={onUpgrade}>
-                      👑 Upgrade to Pro — ₹399 Lifetime
+                      👑 Upgrade to Pro — ₹499 Lifetime
                     </ShimmerButton>
                     {/* Refundable Button */}
                     <button
@@ -526,10 +526,10 @@ const BillingsTab = ({ isPro, onUpgrade, onDowngrade }) => {
               <div style={{ position: 'absolute', bottom: -20, left: 10, width: 90, height: 90, borderRadius: '50%', background: 'rgba(0,195,126,0.2)' }} />
               <div style={{ position: 'relative', zIndex: 1, textAlign: 'center' }}>
                 <div style={{ fontSize: 40, animation: 'crownSpin 3s ease-in-out infinite', display: 'inline-block', marginBottom: 10 }}>👑</div>
-                <div style={{ color: 'white', fontWeight: 900, fontSize: 18, fontFamily: 'var(--font-display)', marginBottom: 4, letterSpacing: '-0.3px' }}>One-time. Lifetime. ₹399.</div>
+                <div style={{ color: 'white', fontWeight: 900, fontSize: 18, fontFamily: 'var(--font-display)', marginBottom: 4, letterSpacing: '-0.3px' }}>One-time. Lifetime. ₹499.</div>
                 <div style={{ color: 'rgba(255,255,255,0.5)', fontSize: 12, lineHeight: 1.7, marginBottom: 16 }}>Pay once, earn every day forever — no recurring charges.</div>
                 <ShimmerButton onClick={() => { setActivePlan('pro'); onUpgrade(); }}>
-                  👑 Get Pro Lifetime — ₹399
+                  👑 Get Pro Lifetime — ₹499
                 </ShimmerButton>
                 <div style={{ marginTop: 12, fontSize: 11, color: 'rgba(255,255,255,0.3)' }}>🔒 Secure checkout · Instant activation</div>
               </div>
@@ -539,7 +539,7 @@ const BillingsTab = ({ isPro, onUpgrade, onDowngrade }) => {
           {/* ── FAQ ── */}
           <h3 style={{ fontSize: 15, fontWeight: 800, fontFamily: 'var(--font-display)', marginBottom: 12 }}>Common Questions</h3>
           {[
-            { q: 'Is it really a one-time payment?', a: 'Yes! Pay ₹399 once and get Pro access forever. No subscription, no renewals.' },
+            { q: 'Is it really a one-time payment?', a: 'Yes! Pay ₹499 once and get Pro access forever. No subscription, no renewals.' },
             { q: 'How are payments processed?', a: 'Via UPI or bank transfer. Pro members get priority payouts credited within 24 hours.' },
             { q: 'What are the extra 35 tasks?', a: 'Same great PDF editing tasks — digitization, watermarking, redaction — just 35 more each day.' },
           ].map((item, i) => (

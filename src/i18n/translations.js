@@ -70,9 +70,9 @@ const translations = {
     free: 'Free',
     pro: 'Pro',
     free_price: 'FREE',
-    pro_price: '₹399',
+    pro_price: '₹499',
     lifetime: 'Lifetime',
-    upgrade_now: '👑 Upgrade Now — ₹399 Lifetime',
+    upgrade_now: '👑 Upgrade Now — ₹499 Lifetime',
     current_plan: '✓ Current Plan',
     maybe_later: 'Maybe Later',
 
@@ -252,9 +252,9 @@ const translations = {
     free: 'फ्री',
     pro: 'प्रो',
     free_price: 'मुफ़्त',
-    pro_price: '₹399',
+    pro_price: '₹499',
     lifetime: 'आजीवन',
-    upgrade_now: '👑 अभी अपग्रेड करें — ₹399 आजीवन',
+    upgrade_now: '👑 अभी अपग्रेड करें — ₹499 आजीवन',
     current_plan: '✓ वर्तमान प्लान',
     maybe_later: 'बाद में',
 
