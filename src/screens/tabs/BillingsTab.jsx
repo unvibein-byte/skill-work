@@ -243,9 +243,35 @@ const BillingsTab = ({ isPro, onUpgrade, onDowngrade }) => {
                   <span style={{ fontSize: 18 }}>✅</span>
                   <span style={{ fontSize: 14, fontWeight: 700, color: '#7F56D9' }}>You're on Pro — All features active!</span>
                 </div>
-                : <ShimmerButton onClick={onUpgrade}>
-                  👑 Upgrade to Pro — ₹399 Lifetime
-                </ShimmerButton>
+                : <>
+                  <ShimmerButton onClick={onUpgrade}>
+                    👑 Upgrade to Pro — ₹399 Lifetime
+                  </ShimmerButton>
+                  {/* Refundable Button */}
+                  <button
+                    style={{
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      gap: 8, width: '100%', marginTop: 10, padding: '11px 16px',
+                      background: 'white', border: '1.5px solid #fce7f3',
+                      borderRadius: 100, cursor: 'pointer', transition: 'all 0.2s',
+                    }}
+                    onMouseOver={e => e.currentTarget.style.background = '#fff0f7'}
+                    onMouseOut={e => e.currentTarget.style.background = 'white'}
+                  >
+                    <span style={{ fontSize: 15, fontWeight: 700, color: '#e11d48', fontFamily: 'var(--font-sans)' }}>(Refundable)</span>
+                    <span style={{
+                      display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                      width: 20, height: 20, borderRadius: '50%', background: '#f1f5f9',
+                      border: '1px solid #e2e8f0', flexShrink: 0,
+                    }}>
+                      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#64748b" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                        <circle cx="12" cy="12" r="10" />
+                        <path d="M12 16v-4" />
+                        <path d="M12 8h.01" />
+                      </svg>
+                    </span>
+                  </button>
+                </>
             ) : (
               isPro
                 ? <button onClick={() => setShowConfirm(true)}
