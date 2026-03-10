@@ -14,10 +14,10 @@ function App() {
       <div className="app-container">
         <AnimatePresence mode="wait">
           <Routes location={location} key={location.pathname}>
-            <Route path="/"        element={<Splash />} />
-            <Route path="/login"   element={<Login  />} />
-            <Route path="/main/*"  element={<Main   />} />
-            <Route path="*"        element={<Navigate to="/" />} />
+            <Route path="/" element={<Splash />} />
+            <Route path="/login" element={<Login />} />
+            <Route path="/main/*" element={<Main />} />
+            <Route path="*" element={<Navigate to="/" />} />
           </Routes>
         </AnimatePresence>
       </div>
