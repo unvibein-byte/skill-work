@@ -113,11 +113,98 @@ const BillingsTab = ({ isPro, onUpgrade, onDowngrade }) => {
   const [showConfirm, setShowConfirm] = useState(false);
   const [highlighted, setHighlighted] = useState(false);
   const [showRefundInfo, setShowRefundInfo] = useState(false);
+  const [showDiscount, setShowDiscount] = useState(false);
+  const [discountPct, setDiscountPct] = useState(null);   // null | number
+  const [selectedRole, setSelectedRole] = useState(null); // null | 'student' | 'housewife'
 
+  const basePrice = 399;
+  const discountedPrice = discountPct ? Math.round(basePrice - (basePrice * discountPct) / 100) : basePrice;
   const isViewingPro = activePlan === 'pro';
 
   return (
     <>
+      {/* ── DISCOUNT POPUP ── */}
+      {showDiscount && (
+        <div
+          style={{
+            position: 'fixed', inset: 0, zIndex: 9999,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)',
+            padding: '0 24px',
+          }}
+          onClick={() => setShowDiscount(false)}
+        >
+          <div
+            style={{
+              background: 'linear-gradient(160deg,#0f1220 0%,#1a2040 100%)',
+              borderRadius: 24, padding: '28px 22px 24px',
+              width: '100%', maxWidth: 380,
+              boxShadow: '0 20px 60px rgba(0,0,0,0.6)',
+              border: '1px solid rgba(255,255,255,0.1)',
+            }}
+            onClick={e => e.stopPropagation()}
+          >
+            <h3 style={{ fontSize: 20, fontWeight: 900, color: 'white', fontFamily: 'var(--font-display)', textAlign: 'center', marginBottom: 6 }}>Special Discount 🎉</h3>
+            <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.55)', textAlign: 'center', marginBottom: 20, lineHeight: 1.5 }}>
+              Students &amp; Housewives get an exclusive 1–5% off on Premium!
+            </p>
+
+            {/* Role selection */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 20 }}>
+              {[
+                { id: 'student', icon: '🎓', label: 'Student', pct: 5, sub: '5% OFF' },
+                { id: 'housewife', icon: '🏠', label: 'Housewife', pct: 3, sub: '3% OFF' },
+              ].map(role => (
+                <button
+                  key={role.id}
+                  onClick={() => { setSelectedRole(role.id); setDiscountPct(role.pct); }}
+                  style={{
+                    padding: '16px 10px', borderRadius: 16, border: `2px solid ${selectedRole === role.id ? '#a78bfa' : 'rgba(255,255,255,0.1)'}`,
+                    background: selectedRole === role.id ? 'rgba(127,86,217,0.2)' : 'rgba(255,255,255,0.04)',
+                    cursor: 'pointer', transition: 'all 0.2s', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6,
+                  }}
+                >
+                  <span style={{ fontSize: 32 }}>{role.icon}</span>
+                  <span style={{ fontSize: 14, fontWeight: 800, color: 'white', fontFamily: 'var(--font-display)' }}>{role.label}</span>
+                  <span style={{ fontSize: 11, fontWeight: 700, background: 'linear-gradient(135deg,#a78bfa,#7F56D9)', color: 'white', padding: '2px 10px', borderRadius: 100 }}>{role.sub}</span>
+                </button>
+              ))}
+            </div>
+
+            {/* Discounted price preview */}
+            {selectedRole && (
+              <div style={{ background: 'rgba(127,86,217,0.12)', border: '1px solid rgba(127,86,217,0.3)', borderRadius: 14, padding: '14px 16px', marginBottom: 20, textAlign: 'center' }}>
+                <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.5)', fontWeight: 600, marginBottom: 4 }}>Your price after discount</div>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10 }}>
+                  <span style={{ fontSize: 18, color: 'rgba(255,255,255,0.4)', textDecoration: 'line-through', fontFamily: 'var(--font-display)', fontWeight: 700 }}>₹{basePrice}</span>
+                  <span style={{ fontSize: 32, fontWeight: 900, color: '#a78bfa', fontFamily: 'var(--font-display)' }}>₹{discountedPrice}</span>
+                  <span style={{ fontSize: 12, fontWeight: 800, background: 'linear-gradient(135deg,#ef4444,#f97316)', color: 'white', padding: '2px 9px', borderRadius: 100 }}>{discountPct}% OFF</span>
+                </div>
+              </div>
+            )}
+
+            {/* Apply button */}
+            <button
+              disabled={!selectedRole}
+              onClick={() => setShowDiscount(false)}
+              style={{
+                width: '100%', padding: '14px', borderRadius: 14, border: 'none',
+                fontFamily: 'var(--font-sans)', fontWeight: 800, fontSize: 15,
+                background: selectedRole ? 'linear-gradient(135deg,#7F56D9,#a78bfa)' : '#2a2a3a',
+                color: selectedRole ? 'white' : 'rgba(255,255,255,0.3)',
+                cursor: selectedRole ? 'pointer' : 'not-allowed',
+                boxShadow: selectedRole ? '0 8px 24px rgba(127,86,217,0.35)' : 'none',
+                transition: 'all 0.2s',
+              }}
+            >
+              {selectedRole ? `Apply ${discountPct}% Discount →` : 'Select your role above'}
+            </button>
+
+            <button onClick={() => setShowDiscount(false)} style={{ display: 'block', margin: '12px auto 0', background: 'transparent', border: 'none', color: 'rgba(255,255,255,0.35)', fontSize: 13, cursor: 'pointer', textDecoration: 'underline' }}>Cancel</button>
+          </div>
+        </div>
+      )}
+
       {/* ── REFUND INFO POPUP ── */}
       {showRefundInfo && (
         <div
@@ -265,7 +352,14 @@ const BillingsTab = ({ isPro, onUpgrade, onDowngrade }) => {
                   </div>
                 )}
                 <div style={{ fontSize: 50, fontWeight: 900, fontFamily: 'var(--font-display)', letterSpacing: '-2px', color: isViewingPro ? '#7F56D9' : 'var(--text-primary)', lineHeight: 1, transition: 'all 0.3s' }}>
-                  {isViewingPro ? '₹399' : 'FREE'}
+                  {isViewingPro ? (
+                    discountPct
+                      ? <>
+                        <span style={{ fontSize: 22, textDecoration: 'line-through', color: 'rgba(127,86,217,0.4)', letterSpacing: '-1px' }}>₹{basePrice}</span>
+                        {' '}₹{discountedPrice}
+                      </>
+                      : '₹399'
+                  ) : 'FREE'}
                 </div>
                 <div style={{ display: 'inline-flex', alignItems: 'center', gap: 5, background: '#f0fdf4', border: '1px solid var(--green-border)', borderRadius: 100, padding: '3px 12px', marginTop: 8 }}>
                   <span style={{ fontSize: 11, fontWeight: 800, color: 'var(--green)' }}>
@@ -279,6 +373,25 @@ const BillingsTab = ({ isPro, onUpgrade, onDowngrade }) => {
                   </span>
                 </div>
               </div>
+
+              {/* Student / Housewife discount button */}
+              {isViewingPro && !isPro && (
+                <button
+                  onClick={() => setShowDiscount(true)}
+                  style={{
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+                    width: '100%', marginTop: 12, padding: '10px 16px',
+                    background: 'linear-gradient(135deg, rgba(127,86,217,0.08), rgba(167,139,250,0.08))',
+                    border: '1.5px dashed rgba(127,86,217,0.4)',
+                    borderRadius: 100, cursor: 'pointer', transition: 'all 0.2s',
+                  }}
+                >
+                  <span style={{ fontSize: 15 }}>🎓</span>
+                  <span style={{ fontSize: 13, fontWeight: 700, color: '#7F56D9', fontFamily: 'var(--font-sans)' }}>
+                    Student / Housewife? Get {discountPct ? discountPct + '% OFF Applied ✔' : '1–5% OFF'}
+                  </span>
+                </button>
+              )}
 
               {/* Key stats */}
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 18 }}>
