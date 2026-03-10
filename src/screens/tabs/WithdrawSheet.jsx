@@ -1,7 +1,7 @@
 import { useState } from 'react';
 
 const QUICK_AMOUNTS = [100, 200, 500, 1000];
-const MIN_WITHDRAW  = 500;
+const MIN_WITHDRAW = 500;
 
 /* ─── helpers ─────────────────────────────────────────────────────────────── */
 const fmt = (n) => parseFloat(n).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -20,24 +20,29 @@ const saveWithdrawal = (entry) => {
 
 /* ════════════════════════════════════════════════════════════════════════════ */
 const WithdrawSheet = ({ balance = 0, onClose, onWithdraw }) => {
-  const upi      = localStorage.getItem('sw_upi')   || '';
-  const bankName = localStorage.getItem('sw_bank')  || '';
-  const accNo    = localStorage.getItem('sw_acc')   || '';
+  const upi = localStorage.getItem('sw_upi') || '';
+  const bankName = localStorage.getItem('sw_bank') || '';
+  const accNo = localStorage.getItem('sw_acc') || '';
+  const completedCount = (() => {
+    try { return JSON.parse(localStorage.getItem('sw_completed') || '[]').length; }
+    catch { return 0; }
+  })();
 
   const hasPayment = !!(upi || accNo);
 
-  const [amount,   setAmount]   = useState('');
-  const [method,   setMethod]   = useState(upi ? 'upi' : 'bank');
-  const [phase,    setPhase]    = useState('form'); // form | confirm | processing | success | error
-  const [history,  setHistory]  = useState(getHistory);
+  const [amount, setAmount] = useState('');
+  const [method, setMethod] = useState(upi ? 'upi' : 'bank');
+  const [phase, setPhase] = useState('form'); // form | confirm | processing | success | error
+  const [history, setHistory] = useState(getHistory);
 
   const numAmt = parseFloat(amount) || 0;
 
   // ── Validation ──
   const errors = [];
-  if (!hasPayment)              errors.push('⚠️ No payment method saved. Go to Settings → Bank/UPI first.');
+  if (!hasPayment) errors.push('⚠️ No payment method saved. Go to Settings → Bank/UPI first.');
+  else if (completedCount < 35) errors.push(`⚠️ You must complete at least 35 tasks to withdraw (Current: ${completedCount}/35).`);
   else if (numAmt < MIN_WITHDRAW) errors.push(`⚠️ Minimum withdrawal is ₹${MIN_WITHDRAW}.`);
-  else if (numAmt > balance)    errors.push('⚠️ Amount exceeds your available balance.');
+  else if (numAmt > balance) errors.push('⚠️ Amount exceeds your available balance.');
 
   const canSubmit = errors.length === 0 && numAmt > 0;
 
@@ -46,11 +51,11 @@ const WithdrawSheet = ({ balance = 0, onClose, onWithdraw }) => {
     setPhase('processing');
     setTimeout(() => {
       const entry = {
-        id:     Date.now(),
+        id: Date.now(),
         amount: numAmt,
         method: method === 'upi' ? `UPI · ${upi}` : `Bank · ${bankName} ****${accNo.slice(-4)}`,
         status: 'pending',
-        date:   new Date().toISOString(),
+        date: new Date().toISOString(),
       };
       saveWithdrawal(entry);
       setHistory(getHistory());
@@ -137,7 +142,7 @@ const WithdrawSheet = ({ balance = 0, onClose, onWithdraw }) => {
             onChange={e => setAmount(e.target.value)}
             style={{ width: '100%', background: '#f0f2f8', border: '1.5px solid var(--border-color)', color: 'var(--text-primary)', padding: '13px 14px 13px 36px', borderRadius: 14, fontFamily: 'var(--font-display)', fontSize: 20, fontWeight: 800, outline: 'none', transition: 'all 0.2s' }}
             onFocus={e => { e.target.style.borderColor = 'var(--green)'; e.target.style.background = 'white'; e.target.style.boxShadow = '0 0 0 3px rgba(0,195,126,0.1)'; }}
-            onBlur={e  => { e.target.style.borderColor = 'var(--border-color)'; e.target.style.background = '#f0f2f8'; e.target.style.boxShadow = 'none'; }}
+            onBlur={e => { e.target.style.borderColor = 'var(--border-color)'; e.target.style.background = '#f0f2f8'; e.target.style.boxShadow = 'none'; }}
           />
           {balance > 0 && (
             <button onClick={() => setAmount(String(Math.floor(balance)))}
@@ -197,8 +202,8 @@ const WithdrawSheet = ({ balance = 0, onClose, onWithdraw }) => {
         {canSubmit && (
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 14 }}>
             {[
-              { label: 'You get',    val: `₹${fmt(numAmt)}`,               color: 'var(--green)'  },
-              { label: 'After this', val: `₹${fmt(balance - numAmt)}`, color: '#4361ee'       },
+              { label: 'You get', val: `₹${fmt(numAmt)}`, color: 'var(--green)' },
+              { label: 'After this', val: `₹${fmt(balance - numAmt)}`, color: '#4361ee' },
             ].map((r, i) => (
               <div key={i} style={{ background: '#f8f9fc', borderRadius: 12, padding: '10px 12px', border: '1px solid var(--border-color)' }}>
                 <div style={{ fontSize: 10, color: 'var(--text-muted)', fontWeight: 600, marginBottom: 3, textTransform: 'uppercase' }}>{r.label}</div>
@@ -212,7 +217,8 @@ const WithdrawSheet = ({ balance = 0, onClose, onWithdraw }) => {
         <button
           onClick={handleSubmit}
           disabled={!canSubmit}
-          style={{ width: '100%', padding: '15px', borderRadius: 14, border: 'none', fontFamily: 'var(--font-sans)', fontWeight: 800, fontSize: 15, cursor: canSubmit ? 'pointer' : 'not-allowed', transition: 'all 0.2s', letterSpacing: '0.2px',
+          style={{
+            width: '100%', padding: '15px', borderRadius: 14, border: 'none', fontFamily: 'var(--font-sans)', fontWeight: 800, fontSize: 15, cursor: canSubmit ? 'pointer' : 'not-allowed', transition: 'all 0.2s', letterSpacing: '0.2px',
             background: canSubmit ? 'var(--grad-green)' : '#e5e7eb',
             color: canSubmit ? 'white' : 'var(--text-muted)',
             boxShadow: canSubmit ? 'var(--green-glow)' : 'none',
