@@ -2,7 +2,7 @@ const translations = {
   en: {
     // ── Nav ──
     nav_home: 'HOME', nav_task: 'TASK', nav_refer: 'REFER', nav_setting: 'SETTING',
-    tab_dashboard: 'Dashboard', tab_task: 'Daily Task', tab_billings: 'Billings',
+    tab_dashboard: 'Dashboard', tab_task: 'Daily Task', tab_billings: 'Premium',
     tab_analytics: 'Analytics', tab_achievements: 'Achievements',
 
     // ── Header ──
@@ -70,9 +70,9 @@ const translations = {
     free: 'Free',
     pro: 'Pro',
     free_price: 'FREE',
-    pro_price: '₹399',
+    pro_price: '₹499',
     lifetime: 'Lifetime',
-    upgrade_now: '👑 Upgrade Now — ₹399 Lifetime',
+    upgrade_now: '👑 Upgrade Now — ₹499 Lifetime',
     current_plan: '✓ Current Plan',
     maybe_later: 'Maybe Later',
 
@@ -184,7 +184,7 @@ const translations = {
   hi: {
     // ── Nav ──
     nav_home: 'होम', nav_task: 'कार्य', nav_refer: 'रेफर', nav_setting: 'सेटिंग',
-    tab_dashboard: 'डैशबोर्ड', tab_task: 'दैनिक कार्य', tab_billings: 'बिलिंग',
+    tab_dashboard: 'डैशबोर्ड', tab_task: 'दैनिक कार्य', tab_billings: 'प्रीमियम',
     tab_analytics: 'विश्लेषण', tab_achievements: 'उपलब्धियाँ',
 
     // ── Header ──
@@ -252,9 +252,9 @@ const translations = {
     free: 'फ्री',
     pro: 'प्रो',
     free_price: 'मुफ़्त',
-    pro_price: '₹399',
+    pro_price: '₹499',
     lifetime: 'आजीवन',
-    upgrade_now: '👑 अभी अपग्रेड करें — ₹399 आजीवन',
+    upgrade_now: '👑 अभी अपग्रेड करें — ₹499 आजीवन',
     current_plan: '✓ वर्तमान प्लान',
     maybe_later: 'बाद में',
 

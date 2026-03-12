@@ -1,7 +1,7 @@
 import { useState } from 'react';
 
 const QUICK_AMOUNTS = [100, 200, 500, 1000];
-const MIN_WITHDRAW  = 500;
+const MIN_WITHDRAW = 500;
 
 /* ─── helpers ─────────────────────────────────────────────────────────────── */
 const fmt = (n) => parseFloat(n).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -20,37 +20,52 @@ const saveWithdrawal = (entry) => {
 
 /* ════════════════════════════════════════════════════════════════════════════ */
 const WithdrawSheet = ({ balance = 0, onClose, onWithdraw }) => {
-  const upi      = localStorage.getItem('sw_upi')   || '';
-  const bankName = localStorage.getItem('sw_bank')  || '';
-  const accNo    = localStorage.getItem('sw_acc')   || '';
+  const upi = localStorage.getItem('sw_upi') || '';
+  const bankName = localStorage.getItem('sw_bank') || '';
+  const accNo = localStorage.getItem('sw_acc') || '';
+  const completedCount = (() => {
+    try { return JSON.parse(localStorage.getItem('sw_completed') || '[]').length; }
+    catch { return 0; }
+  })();
 
   const hasPayment = !!(upi || accNo);
+  const isPro = localStorage.getItem('sw_pro') === 'true';
 
-  const [amount,   setAmount]   = useState('');
-  const [method,   setMethod]   = useState(upi ? 'upi' : 'bank');
-  const [phase,    setPhase]    = useState('form'); // form | confirm | processing | success | error
-  const [history,  setHistory]  = useState(getHistory);
+  const [amount, setAmount] = useState('');
+  const [method, setMethod] = useState(upi ? 'upi' : 'bank');
+  const [phase, setPhase] = useState('form'); // form | confirm | processing | success | error
+  const [history, setHistory] = useState(getHistory);
 
   const numAmt = parseFloat(amount) || 0;
 
   // ── Validation ──
-  const errors = [];
-  if (!hasPayment)              errors.push('⚠️ No payment method saved. Go to Settings → Bank/UPI first.');
-  else if (numAmt < MIN_WITHDRAW) errors.push(`⚠️ Minimum withdrawal is ₹${MIN_WITHDRAW}.`);
-  else if (numAmt > balance)    errors.push('⚠️ Amount exceeds your available balance.');
+  const inputErrors = [];
+  if (!hasPayment) inputErrors.push('⚠️ No payment method saved. Go to Settings → Bank/UPI first.');
+  else if (amount !== '' && numAmt < MIN_WITHDRAW) inputErrors.push(`⚠️ Minimum withdrawal is ₹${MIN_WITHDRAW}.`);
+  else if (numAmt > balance) inputErrors.push('⚠️ Amount exceeds your available balance.');
 
-  const canSubmit = errors.length === 0 && numAmt > 0;
+  const canSubmit = inputErrors.length === 0 && numAmt >= MIN_WITHDRAW && numAmt <= balance;
 
   const handleSubmit = () => {
     if (!canSubmit) return;
+
+    if (!isPro) {
+      setPhase('premium_modal');
+      return;
+    }
+    if (completedCount < 35) {
+      setPhase('task_modal');
+      return;
+    }
+
     setPhase('processing');
     setTimeout(() => {
       const entry = {
-        id:     Date.now(),
+        id: Date.now(),
         amount: numAmt,
         method: method === 'upi' ? `UPI · ${upi}` : `Bank · ${bankName} ****${accNo.slice(-4)}`,
         status: 'pending',
-        date:   new Date().toISOString(),
+        date: new Date().toISOString(),
       };
       saveWithdrawal(entry);
       setHistory(getHistory());
@@ -58,6 +73,86 @@ const WithdrawSheet = ({ balance = 0, onClose, onWithdraw }) => {
       setPhase('success');
     }, 2200);
   };
+
+  /* ── PHASE: TASK MODAL ──────────────────────────── */
+  if (phase === 'task_modal') return (
+    <div className="modal-overlay">
+      <div className="modal-content" style={{ padding: 0, background: 'linear-gradient(160deg, #1A1040 0%, #0D0D1A 100%)', border: '1px solid rgba(56,189,248,0.3)', overflow: 'hidden' }}>
+        <div style={{ padding: '32px 20px 24px', textAlign: 'center', position: 'relative' }}>
+          <div style={{ position: 'absolute', top: -50, right: -50, width: 150, height: 150, borderRadius: '50%', background: 'radial-gradient(circle, rgba(56,189,248,0.2) 0%, transparent 70%)' }}></div>
+          <h2 style={{ fontSize: 40, marginBottom: 12 }}>📋</h2>
+          <h2 style={{ fontSize: 22, fontWeight: 900, color: '#38bdf8', fontFamily: 'var(--font-display)', marginBottom: 8, position: 'relative', zIndex: 1 }}>Complete More Tasks</h2>
+          <p style={{ fontSize: 14, fontWeight: 600, color: 'rgba(255,255,255,0.9)', marginBottom: 20, lineHeight: 1.5, position: 'relative', zIndex: 1 }}>
+            You need to complete at least <strong>35 tasks</strong> to make your first withdrawal.
+          </p>
+
+          <div style={{ background: 'rgba(255,255,255,0.05)', borderRadius: 16, padding: '16px', border: '1px solid rgba(255,255,255,0.1)', marginBottom: 24, position: 'relative', zIndex: 1 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
+              <span style={{ fontSize: 13, color: 'rgba(255,255,255,0.7)', fontWeight: 600 }}>Progress</span>
+              <span style={{ fontSize: 13, color: '#38bdf8', fontWeight: 800 }}>{completedCount} / 35</span>
+            </div>
+            <div style={{ height: 8, background: 'rgba(255,255,255,0.1)', borderRadius: 100, overflow: 'hidden' }}>
+              <div style={{ height: '100%', background: 'linear-gradient(90deg, #38bdf8, #818cf8)', width: `${Math.min((completedCount / 35) * 100, 100)}%`, borderRadius: 100 }} />
+            </div>
+          </div>
+
+          <button
+            style={{ width: '100%', padding: '15px', borderRadius: 14, background: 'linear-gradient(135deg, #38bdf8, #2563eb)', color: 'white', fontSize: 15, fontWeight: 900, fontFamily: 'var(--font-sans)', border: 'none', boxShadow: '0 8px 24px rgba(56,189,248,0.3)', cursor: 'pointer', position: 'relative', zIndex: 1 }}
+            onClick={onClose}
+          >
+            Start Working
+          </button>
+
+          <button onClick={() => setPhase('form')} style={{ background: 'transparent', border: 'none', color: 'rgba(255,255,255,0.4)', marginTop: 16, fontSize: 13, fontWeight: 600, cursor: 'pointer', position: 'relative', zIndex: 1, textDecoration: 'underline' }}>
+            Go Back
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+
+  /* ── PHASE: PREMIUM MODAL ───────────────────────── */
+  if (phase === 'premium_modal') return (
+    <div className="modal-overlay">
+      <div className="modal-content" style={{ padding: 0, background: 'linear-gradient(160deg, #1A1040 0%, #0D0D1A 100%)', border: '1px solid rgba(127,86,217,0.3)', overflow: 'hidden' }}>
+        <div style={{ padding: '32px 20px 24px', textAlign: 'center', position: 'relative' }}>
+          <div style={{ position: 'absolute', top: -50, right: -50, width: 150, height: 150, borderRadius: '50%', background: 'radial-gradient(circle, rgba(245,158,11,0.2) 0%, transparent 70%)' }}></div>
+          <div style={{ position: 'absolute', bottom: -50, left: -50, width: 150, height: 150, borderRadius: '50%', background: 'radial-gradient(circle, rgba(127,86,217,0.3) 0%, transparent 70%)' }}></div>
+
+          <h2 style={{ fontSize: 26, fontWeight: 900, color: '#f59e0b', fontFamily: 'var(--font-display)', marginBottom: 8, position: 'relative', zIndex: 1 }}>SkillWork</h2>
+          <p style={{ fontSize: 14, fontWeight: 700, color: 'white', marginBottom: 20, lineHeight: 1.5, position: 'relative', zIndex: 1, padding: '0 10px' }}>
+            पैसे निकालने के लिए नीचे दी गयी जानकारी पूरी पढ़ें !
+          </p>
+
+          <div style={{ textAlign: 'left', background: 'rgba(255,255,255,0.04)', borderRadius: 16, padding: '16px', border: '1px solid rgba(255,255,255,0.08)', marginBottom: 20, position: 'relative', zIndex: 1 }}>
+            <ul style={{ listStyle: 'none', padding: 0, margin: 0, color: 'rgba(255,255,255,0.9)', fontSize: 14, lineHeight: 1.6, fontWeight: 500 }}>
+              <li style={{ marginBottom: 10, display: 'flex', gap: 10 }}><span style={{ color: '#f59e0b', fontSize: 16 }}>•</span> <span style={{ paddingTop: 2 }}>केवल <strong>Premium</strong> सदस्य ही पैसे निकाल सकते हैं।</span></li>
+              <li style={{ marginBottom: 10, display: 'flex', gap: 10 }}><span style={{ color: '#f59e0b', fontSize: 16 }}>•</span> <span style={{ paddingTop: 2 }}>Premium सदस्यता सिर्फ <strong>₹399</strong> की है।</span></li>
+              <li style={{ marginBottom: 10, display: 'flex', gap: 10 }}><span style={{ color: '#f59e0b', fontSize: 16 }}>•</span> <span style={{ paddingTop: 2 }}>रोज़ 50+ टास्क मुफ्त मिलेंगे।</span></li>
+              <li style={{ marginBottom: 10, display: 'flex', gap: 10 }}><span style={{ color: '#f59e0b', fontSize: 16 }}>•</span> <span style={{ paddingTop: 2 }}>त्वरित ग्राहक सहायता।</span></li>
+              <li style={{ display: 'flex', gap: 10 }}><span style={{ color: '#f59e0b', fontSize: 16 }}>•</span> <span style={{ paddingTop: 2 }}><strong>BUY NOW</strong> दबाकर Premium सदस्य बनें।</span></li>
+            </ul>
+          </div>
+
+          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, background: 'linear-gradient(135deg, rgba(245,158,11,0.15), rgba(245,158,11,0.05))', border: '1px solid rgba(245,158,11,0.3)', borderRadius: 100, padding: '10px 16px', marginBottom: 24, position: 'relative', zIndex: 1 }}>
+            <span style={{ fontSize: 18 }}>💰</span>
+            <span style={{ fontSize: 12, color: '#fbbf24', fontWeight: 700 }}>अपनी पहली निकासी पर Premium राशि वापस पाएं</span>
+          </div>
+
+          <button
+            style={{ width: '100%', padding: '15px', borderRadius: 14, background: 'linear-gradient(135deg, #f59e0b, #d97706)', color: 'white', fontSize: 15, fontWeight: 900, fontFamily: 'var(--font-sans)', border: 'none', boxShadow: '0 8px 24px rgba(245,158,11,0.3)', cursor: 'pointer', position: 'relative', zIndex: 1 }}
+            onClick={onClose}
+          >
+            Buy Now
+          </button>
+
+          <button onClick={() => setPhase('form')} style={{ background: 'transparent', border: 'none', color: 'rgba(255,255,255,0.4)', marginTop: 16, fontSize: 13, fontWeight: 600, cursor: 'pointer', position: 'relative', zIndex: 1, textDecoration: 'underline' }}>
+            Go Back
+          </button>
+        </div>
+      </div>
+    </div>
+  );
 
   /* ── PHASE: SUCCESS ─────────────────────────────── */
   if (phase === 'success') return (
@@ -137,7 +232,7 @@ const WithdrawSheet = ({ balance = 0, onClose, onWithdraw }) => {
             onChange={e => setAmount(e.target.value)}
             style={{ width: '100%', background: '#f0f2f8', border: '1.5px solid var(--border-color)', color: 'var(--text-primary)', padding: '13px 14px 13px 36px', borderRadius: 14, fontFamily: 'var(--font-display)', fontSize: 20, fontWeight: 800, outline: 'none', transition: 'all 0.2s' }}
             onFocus={e => { e.target.style.borderColor = 'var(--green)'; e.target.style.background = 'white'; e.target.style.boxShadow = '0 0 0 3px rgba(0,195,126,0.1)'; }}
-            onBlur={e  => { e.target.style.borderColor = 'var(--border-color)'; e.target.style.background = '#f0f2f8'; e.target.style.boxShadow = 'none'; }}
+            onBlur={e => { e.target.style.borderColor = 'var(--border-color)'; e.target.style.background = '#f0f2f8'; e.target.style.boxShadow = 'none'; }}
           />
           {balance > 0 && (
             <button onClick={() => setAmount(String(Math.floor(balance)))}
@@ -187,9 +282,9 @@ const WithdrawSheet = ({ balance = 0, onClose, onWithdraw }) => {
         )}
 
         {/* Error */}
-        {numAmt > 0 && errors.length > 0 && (
+        {inputErrors.length > 0 && amount !== '' && (
           <div style={{ background: '#fee2e2', borderRadius: 12, padding: '10px 14px', marginBottom: 14, fontSize: 12, color: '#991b1b', fontWeight: 600 }}>
-            {errors[0]}
+            {inputErrors[0]}
           </div>
         )}
 
@@ -197,8 +292,8 @@ const WithdrawSheet = ({ balance = 0, onClose, onWithdraw }) => {
         {canSubmit && (
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 14 }}>
             {[
-              { label: 'You get',    val: `₹${fmt(numAmt)}`,               color: 'var(--green)'  },
-              { label: 'After this', val: `₹${fmt(balance - numAmt)}`, color: '#4361ee'       },
+              { label: 'You get', val: `₹${fmt(numAmt)}`, color: 'var(--green)' },
+              { label: 'After this', val: `₹${fmt(balance - numAmt)}`, color: '#4361ee' },
             ].map((r, i) => (
               <div key={i} style={{ background: '#f8f9fc', borderRadius: 12, padding: '10px 12px', border: '1px solid var(--border-color)' }}>
                 <div style={{ fontSize: 10, color: 'var(--text-muted)', fontWeight: 600, marginBottom: 3, textTransform: 'uppercase' }}>{r.label}</div>
@@ -212,7 +307,8 @@ const WithdrawSheet = ({ balance = 0, onClose, onWithdraw }) => {
         <button
           onClick={handleSubmit}
           disabled={!canSubmit}
-          style={{ width: '100%', padding: '15px', borderRadius: 14, border: 'none', fontFamily: 'var(--font-sans)', fontWeight: 800, fontSize: 15, cursor: canSubmit ? 'pointer' : 'not-allowed', transition: 'all 0.2s', letterSpacing: '0.2px',
+          style={{
+            width: '100%', padding: '15px', borderRadius: 14, border: 'none', fontFamily: 'var(--font-sans)', fontWeight: 800, fontSize: 15, cursor: canSubmit ? 'pointer' : 'not-allowed', transition: 'all 0.2s', letterSpacing: '0.2px',
             background: canSubmit ? 'var(--grad-green)' : '#e5e7eb',
             color: canSubmit ? 'white' : 'var(--text-muted)',
             boxShadow: canSubmit ? 'var(--green-glow)' : 'none',
