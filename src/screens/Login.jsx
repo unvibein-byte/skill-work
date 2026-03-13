@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
+import { signInAnonymouslyUser, saveUserProfile, isFirebaseConfigured } from '../firebase';
 
 const Login = () => {
   const navigate = useNavigate();
@@ -8,11 +9,29 @@ const Login = () => {
   const [phone, setPhone] = useState('');
   const [loading, setLoading] = useState(false);
 
-  const handleLogin = (e) => {
+  const handleLogin = async (e) => {
     e.preventDefault();
     if (!name || !phone) return;
+
     setLoading(true);
+
+    if (isFirebaseConfigured) {
+      try {
+        // Sign in anonymously (must be enabled in Firebase Authentication settings)
+        const { user } = await signInAnonymouslyUser();
+        if (user?.uid) {
+          await saveUserProfile(user.uid, { name, phone });
+          localStorage.setItem('sw_userId', user.uid);
+        }
+      } catch (error) {
+        console.error('Firebase login failed', error);
+        // Continue even if Firebase fails (app should still work locally)
+      }
+    }
+
+    // Keep local state for offline/demo usage
     localStorage.setItem('sw_name', name);
+
     setTimeout(() => navigate('/onboarding-1'), 1000);
   };
 

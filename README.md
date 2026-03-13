@@ -14,3 +14,31 @@ The React Compiler is not enabled on this template because of its impact on dev 
 ## Expanding the ESLint configuration
 
 If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+
+## Firebase (optional)
+
+This project can connect to Firebase to store user data or enable authentication.
+
+### Setup
+
+1. Create a Firebase project at https://console.firebase.google.com.
+2. Add a new Web app and copy the config values.
+3. Enable **Anonymous** sign-in under **Authentication > Sign-in method** (or configure your preferred provider).
+4. Copy the values into a `.env` (or `.env.local`) file based on the `.env.example` provided.
+
+Example `.env` values:
+
+```env
+VITE_FIREBASE_API_KEY=your_api_key_here
+VITE_FIREBASE_AUTH_DOMAIN=your_project_id.firebaseapp.com
+VITE_FIREBASE_PROJECT_ID=your_project_id
+VITE_FIREBASE_STORAGE_BUCKET=your_project_id.appspot.com
+VITE_FIREBASE_MESSAGING_SENDER_ID=your_sender_id
+VITE_FIREBASE_APP_ID=your_app_id
+```
+
+### How it works
+
+- The app initializes Firebase in `src/firebase.js`.
+- The login screen uses anonymous auth and stores a `users/{uid}` document in Firestore.
+- You can now extend the app to read/write data from Firestore (e.g., tasks, rewards, settings).
