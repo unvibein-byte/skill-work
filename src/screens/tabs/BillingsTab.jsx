@@ -108,7 +108,7 @@ const Ticker = () => {
 };
 
 /* ─── Main Component ──────────────────────────────────────────────────────── */
-const BillingsTab = ({ isPro, onUpgrade, onDowngrade }) => {
+const BillingsTab = ({ isPro, onUpgrade, onDowngrade, onNavigateToPayment }) => {
   const [activePlan, setActivePlan] = useState('pro');
   const [showConfirm, setShowConfirm] = useState(false);
   const [highlighted, setHighlighted] = useState(false);
@@ -424,7 +424,12 @@ const BillingsTab = ({ isPro, onUpgrade, onDowngrade }) => {
                     <span style={{ fontSize: 14, fontWeight: 700, color: '#7F56D9' }}>You're on Pro — All features active!</span>
                   </div>
                   : <>
-                    <ShimmerButton onClick={onUpgrade}>
+                    <ShimmerButton onClick={async () => {
+                      const success = await onUpgrade();
+                      if (!success && onNavigateToPayment) {
+                        onNavigateToPayment();
+                      }
+                    }}>
                       👑 Upgrade to Pro — ₹499 Lifetime
                     </ShimmerButton>
                     {/* Refundable Button */}
@@ -528,7 +533,13 @@ const BillingsTab = ({ isPro, onUpgrade, onDowngrade }) => {
                 <div style={{ fontSize: 40, animation: 'crownSpin 3s ease-in-out infinite', display: 'inline-block', marginBottom: 10 }}>👑</div>
                 <div style={{ color: 'white', fontWeight: 900, fontSize: 18, fontFamily: 'var(--font-display)', marginBottom: 4, letterSpacing: '-0.3px' }}>One-time. Lifetime. ₹499.</div>
                 <div style={{ color: 'rgba(255,255,255,0.5)', fontSize: 12, lineHeight: 1.7, marginBottom: 16 }}>Pay once, earn every day forever — no recurring charges.</div>
-                <ShimmerButton onClick={() => { setActivePlan('pro'); onUpgrade(); }}>
+                <ShimmerButton onClick={async () => {
+                  setActivePlan('pro');
+                  const success = await onUpgrade();
+                  if (!success && onNavigateToPayment) {
+                    onNavigateToPayment();
+                  }
+                }}>
                   👑 Get Pro Lifetime — ₹499
                 </ShimmerButton>
                 <div style={{ marginTop: 12, fontSize: 11, color: 'rgba(255,255,255,0.3)' }}>🔒 Secure checkout · Instant activation</div>
