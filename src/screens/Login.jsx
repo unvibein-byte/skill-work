@@ -31,6 +31,7 @@ const Login = () => {
 
     // Keep local state for offline/demo usage
     localStorage.setItem('sw_name', name);
+    localStorage.setItem('sw_phone', phone);
 
     setTimeout(() => navigate('/onboarding-1'), 1000);
   };

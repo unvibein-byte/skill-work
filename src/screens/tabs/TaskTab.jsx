@@ -119,45 +119,57 @@ const CATEGORY_COLORS = {
 };
 
 // ─── Upgrade Modal ────────────────────────────────────────────────────────────
-const UpgradeModal = ({ onClose, onUpgrade }) => (
-  <div className="modal-overlay" onClick={onClose}>
-    <div className="modal-content" onClick={e => e.stopPropagation()} style={{ paddingBottom: 36 }}>
-      <div style={{ textAlign: 'center', paddingTop: 8 }}>
-        {/* Crown glow */}
-        <div style={{ width: 80, height: 80, margin: '0 auto 16px', borderRadius: '50%', background: 'linear-gradient(135deg,rgba(127,86,217,0.15),rgba(255,107,107,0.1))', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 40, border: '2px solid rgba(127,86,217,0.2)' }}>
-          👑
-        </div>
-        <h3 style={{ fontSize: 22, fontWeight: 900, fontFamily: 'var(--font-display)', marginBottom: 8 }}>Upgrade to Pro</h3>
-        <p style={{ fontSize: 14, color: 'var(--text-secondary)', lineHeight: 1.6, marginBottom: 24 }}>
-          Unlock <strong style={{ color: '#7F56D9' }}>50 PDF tasks/day</strong> and earn up to{' '}
-          <strong style={{ color: 'var(--green)' }}>₹5,000 daily</strong>
-        </p>
+const UpgradeModal = ({ onClose, onUpgrade, onNavigateToPayment }) => {
+  const handleUpgradeClick = async () => {
+    const success = await onUpgrade();
+    if (!success) {
+      // If upgrade failed (no payment), show message and navigate to payment
+      onNavigateToPayment();
+    } else {
+      onClose();
+    }
+  };
 
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 24 }}>
-          {[
-            { icon: '📋', label: '50 tasks/day',     sub: 'vs 15 on Free'      },
-            { icon: '💰', label: '₹5,000/day max',   sub: 'vs ₹1,500 on Free'  },
-            { icon: '⚡', label: '24-hr payouts',    sub: 'vs 48 hrs on Free'   },
-            { icon: '🎯', label: 'Priority tasks',   sub: 'Higher reward tasks' },
-          ].map((c, i) => (
-            <div key={i} style={{ background: '#f8f9fc', borderRadius: 14, padding: '14px 12px', border: '1px solid var(--border-color)', textAlign: 'left' }}>
-              <div style={{ fontSize: 22, marginBottom: 6 }}>{c.icon}</div>
-              <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>{c.label}</div>
-              <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>{c.sub}</div>
-            </div>
-          ))}
-        </div>
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal-content" onClick={e => e.stopPropagation()} style={{ paddingBottom: 36 }}>
+        <div style={{ textAlign: 'center', paddingTop: 8 }}>
+          {/* Crown glow */}
+          <div style={{ width: 80, height: 80, margin: '0 auto 16px', borderRadius: '50%', background: 'linear-gradient(135deg,rgba(127,86,217,0.15),rgba(255,107,107,0.1))', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 40, border: '2px solid rgba(127,86,217,0.2)' }}>
+            👑
+          </div>
+          <h3 style={{ fontSize: 22, fontWeight: 900, fontFamily: 'var(--font-display)', marginBottom: 8 }}>Upgrade to Pro</h3>
+          <p style={{ fontSize: 14, color: 'var(--text-secondary)', lineHeight: 1.6, marginBottom: 24 }}>
+            Unlock <strong style={{ color: '#7F56D9' }}>50 PDF tasks/day</strong> and earn up to{' '}
+            <strong style={{ color: 'var(--green)' }}>₹5,000 daily</strong>
+          </p>
 
-        <button onClick={onUpgrade} className="btn-purple" style={{ marginBottom: 10 }}>
-          👑 Upgrade Now — ₹399 Lifetime
-        </button>
-        <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', fontSize: 14, cursor: 'pointer', fontFamily: 'var(--font-sans)', width: '100%', padding: '8px' }}>
-          Maybe Later
-        </button>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 24 }}>
+            {[
+              { icon: '📋', label: '50 tasks/day',     sub: 'vs 15 on Free'      },
+              { icon: '💰', label: '₹5,000/day max',   sub: 'vs ₹1,500 on Free'  },
+              { icon: '⚡', label: '24-hr payouts',    sub: 'vs 48 hrs on Free'   },
+              { icon: '🎯', label: 'Priority tasks',   sub: 'Higher reward tasks' },
+            ].map((c, i) => (
+              <div key={i} style={{ background: '#f8f9fc', borderRadius: 14, padding: '14px 12px', border: '1px solid var(--border-color)', textAlign: 'left' }}>
+                <div style={{ fontSize: 22, marginBottom: 6 }}>{c.icon}</div>
+                <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>{c.label}</div>
+                <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>{c.sub}</div>
+              </div>
+            ))}
+          </div>
+
+          <button onClick={handleUpgradeClick} className="btn-purple" style={{ marginBottom: 10 }}>
+            👑 Upgrade Now — ₹399 Lifetime
+          </button>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', fontSize: 14, cursor: 'pointer', fontFamily: 'var(--font-sans)', width: '100%', padding: '8px' }}>
+            Maybe Later
+          </button>
+        </div>
       </div>
     </div>
-  </div>
-);
+  );
+};
 
 // ─── Task Detail Modal ────────────────────────────────────────────────────────
 const TaskDetailModal = ({ task, onClose, onTaskComplete }) => {
@@ -603,7 +615,7 @@ const TaskTab = ({ userName, isPro, onUpgrade, onTaskComplete }) => {
 
       {/* Modals */}
       {selectedTask && <TaskDetailModal task={selectedTask} onClose={() => setSelectedTask(null)} onTaskComplete={handleTaskDone} />}
-      {showUpgrade   && <UpgradeModal   onClose={() => setShowUpgrade(false)} onUpgrade={handleUpgrade} />}
+      {showUpgrade   && <UpgradeModal   onClose={() => setShowUpgrade(false)} onUpgrade={handleUpgrade} onNavigateToPayment={onNavigateToPayment} />}
     </div>
   );
 };

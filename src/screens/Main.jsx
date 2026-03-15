@@ -73,13 +73,43 @@ const MainInner = () => {
     localStorage.setItem('sw_balance', String(newBal));
   };
 
-  const handleUpgrade = () => { localStorage.setItem('sw_pro', 'true'); setIsPro(true); };
+  const handleUpgrade = async () => {
+    const userId = localStorage.getItem('sw_userId');
+    if (!userId) {
+      console.error('User not logged in');
+      return false;
+    }
+
+    // Import the function dynamically to avoid circular dependencies
+    const { hasCompletedPremiumPayment } = await import('../firebase');
+    const hasPayment = await hasCompletedPremiumPayment(userId);
+    
+    if (!hasPayment) {
+      console.error('Cannot upgrade: No completed payment found');
+      // Don't upgrade if payment is not verified
+      return false;
+    }
+
+    // Only upgrade if payment is verified
+    localStorage.setItem('sw_pro', 'true');
+    setIsPro(true);
+    return true;
+  };
   const handleDowngrade = () => { localStorage.removeItem('sw_pro'); setIsPro(false); };
 
   const handleBottomTab = (key) => {
     setActiveBottom(key);
     const map = { home: 'Dashboard', task: 'Daily Task', refer: 'Dashboard', setting: 'Dashboard' };
     setActiveTop(map[key] || 'Dashboard');
+    document.querySelector('.screen-body')?.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const handleNavigateToPayment = () => {
+    // Navigate to settings tab and open payment sheet
+    setActiveBottom('setting');
+    setActiveTop('Dashboard');
+    // Store a flag to open payment sheet when SettingTab mounts
+    localStorage.setItem('sw_open_payment', 'true');
     document.querySelector('.screen-body')?.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
@@ -109,8 +139,8 @@ const MainInner = () => {
     if (activeBottom === 'refer') return <ReferTab userName={userName} />;
     if (activeBottom === 'setting') return <SettingTab userName={userName} isPro={isPro} onUpgrade={handleUpgrade} onDowngrade={handleDowngrade} />;
 
-    if (activeTop === 'Daily Task') return <TaskTab userName={userName} isPro={isPro} onUpgrade={handleUpgrade} onTaskComplete={handleTaskComplete} />;
-    if (activeTop === 'Billings') return <BillingsTab isPro={isPro} onUpgrade={handleUpgrade} onDowngrade={handleDowngrade} />;
+    if (activeTop === 'Daily Task') return <TaskTab userName={userName} isPro={isPro} onUpgrade={handleUpgrade} onTaskComplete={handleTaskComplete} onNavigateToPayment={handleNavigateToPayment} />;
+    if (activeTop === 'Billings') return <BillingsTab isPro={isPro} onUpgrade={handleUpgrade} onDowngrade={handleDowngrade} onNavigateToPayment={handleNavigateToPayment} />;
     if (activeTop === 'Analytics') return <AnalyticsTab isPro={isPro} completedCount={completedCount} />;
     if (activeTop === 'Achievements') return <AchievementsTab isPro={isPro} />;
 

@@ -40,5 +40,9 @@ VITE_FIREBASE_APP_ID=your_app_id
 ### How it works
 
 - The app initializes Firebase in `src/firebase.js`.
+- **Automatic setup**: On app start, `initializeFirestoreData()` creates default documents if they don't exist.
 - The login screen uses anonymous auth and stores a `users/{uid}` document in Firestore.
+- UPI payment details are stored in `payment/upi` document (auto-created with defaults).
+- Pro pricing is stored in `config/pricing` document (auto-created with defaults).
+- Users can upgrade to Pro via UPI Intent or QR code payment using dynamic pricing.
 - You can now extend the app to read/write data from Firestore (e.g., tasks, rewards, settings).
