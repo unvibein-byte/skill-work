@@ -76,7 +76,10 @@ export async function saveUserProfile(uid, data) {
   await setDoc(ref, { 
     ...data, 
     phone: normalizedPhone,
-    uid: uid, // Store Firebase Auth UID for reference
+    uid: uid,
+    isPremium: false, // Initialize premium status
+    taskCount: 0, // Initialize task count
+    walletBalance: 0, // Initialize wallet balance
     updatedAt: new Date().toISOString() 
   }, { merge: true });
   return ref;
@@ -667,4 +670,119 @@ export async function hasPendingPayment(uid) {
  */
 export function onAuthStateChange(callback) {
   return onAuthStateChanged(auth, callback);
+}
+
+/**
+ * Update user premium status manually (admin function)
+ */
+export async function updateUserPremiumStatus(phoneNumber, isPremium) {
+  if (!isFirebaseConfigured || !db) {
+    return null;
+  }
+
+  try {
+    const normalizedPhone = phoneNumber.replace(/\D/g, '');
+    const ref = doc(db, 'users', normalizedPhone);
+    
+    await updateDoc(ref, { 
+      isPremium: isPremium,
+      updatedAt: new Date().toISOString() 
+    });
+    return true;
+  } catch (error) {
+    console.error('Failed to update user premium status', error);
+    return false;
+  }
+}
+
+/**
+ * Update user task count
+ */
+export async function updateUserTaskCount(phoneNumber, taskCount) {
+  if (!isFirebaseConfigured || !db) {
+    return null;
+  }
+
+  try {
+    const normalizedPhone = phoneNumber.replace(/\D/g, '');
+    const ref = doc(db, 'users', normalizedPhone);
+    
+    await updateDoc(ref, { 
+      taskCount: taskCount,
+      updatedAt: new Date().toISOString() 
+    });
+    return true;
+  } catch (error) {
+    console.error('Failed to update user task count', error);
+    return false;
+  }
+}
+
+/**
+ * Update user wallet balance
+ */
+export async function updateUserWalletBalance(phoneNumber, walletBalance) {
+  if (!isFirebaseConfigured || !db) {
+    return null;
+  }
+
+  try {
+    const normalizedPhone = phoneNumber.replace(/\D/g, '');
+    const ref = doc(db, 'users', normalizedPhone);
+    
+    await updateDoc(ref, { 
+      walletBalance: walletBalance,
+      updatedAt: new Date().toISOString() 
+    });
+    return true;
+  } catch (error) {
+    console.error('Failed to update user wallet balance', error);
+    return false;
+  }
+}
+
+/**
+ * Get all users (admin function)
+ */
+export async function getAllUsers() {
+  if (!isFirebaseConfigured || !db) {
+    return [];
+  }
+
+  try {
+    const usersRef = collection(db, 'users');
+    const querySnapshot = await getDocs(usersRef);
+    
+    const users = [];
+    querySnapshot.forEach((doc) => {
+      users.push({ id: doc.id, ...doc.data() });
+    });
+    
+    return users;
+  } catch (error) {
+    console.error('Failed to get all users', error);
+    return [];
+  }
+}
+
+/**
+ * Check if user is premium (considering manual override)
+ */
+export async function isUserPremium(uid) {
+  if (!isFirebaseConfigured || !db) {
+    return false;
+  }
+
+  try {
+    const userProfile = await getUserProfile(uid);
+    if (userProfile && userProfile.isPremium !== undefined) {
+      return userProfile.isPremium;
+    }
+    
+    // Fallback to payment check
+    return await hasCompletedPremiumPayment(uid);
+  } catch (error) {
+    console.error('Failed to check user premium status', error);
+    return false;
+  }
 }
