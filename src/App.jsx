@@ -10,6 +10,7 @@ import Main from './screens/Main';
 import OnboardingInstructions from './screens/OnboardingInstructions';
 import OnboardingVideo from './screens/OnboardingVideo';
 import OnboardingTelegram from './screens/OnboardingTelegram';
+import Blocked from './screens/Blocked';
 
 function App() {
   const location = useLocation();
@@ -35,6 +36,7 @@ function App() {
           <Routes location={location} key={location.pathname}>
             <Route path="/" element={<Splash />} />
             <Route path="/login" element={<Login />} />
+            <Route path="/blocked" element={<Blocked />} />
             <Route path="/onboarding-1" element={<OnboardingInstructions />} />
             <Route path="/onboarding-2" element={<OnboardingVideo />} />
             <Route path="/onboarding-3" element={<OnboardingTelegram />} />

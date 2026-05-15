@@ -32,6 +32,9 @@ const translations = {
     step_edit_desc: 'Make changes and save as PDF',
     step_paid: 'Get Paid',
     step_paid_desc: 'Earn ₹100–₹200 per verified task',
+    payment_proof: 'Payment Proof',
+    payment_proof_sub: 'View payment receipts & history',
+    payment_proof_url_missing: 'Payment proof URL is not configured in Firebase',
     free_plan: 'Free Plan · 15 tasks/day',
     pro_plan: 'Pro Plan · 50 tasks/day',
 
@@ -214,6 +217,9 @@ const translations = {
     step_edit_desc: 'बदलाव करें और PDF के रूप में सेव करें',
     step_paid: 'भुगतान पाएं',
     step_paid_desc: 'प्रत्येक सत्यापित कार्य पर ₹100–₹200 कमाएं',
+    payment_proof: 'भुगतान प्रमाण',
+    payment_proof_sub: 'भुगतान रसीद और इतिहास देखें',
+    payment_proof_url_missing: 'Firebase में भुगतान प्रमाण URL कॉन्फ़िग नहीं है',
     free_plan: 'फ्री प्लान · 15 कार्य/दिन',
     pro_plan: 'प्रो प्लान · 50 कार्य/दिन',
 

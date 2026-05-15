@@ -7,7 +7,19 @@ import {
   setPersistence,
   browserLocalPersistence,
 } from 'firebase/auth';
-import { getFirestore, doc, setDoc, getDoc, collection, updateDoc, query, where, getDocs, deleteDoc } from 'firebase/firestore';
+import {
+  getFirestore,
+  doc,
+  setDoc,
+  getDoc,
+  collection,
+  updateDoc,
+  query,
+  where,
+  getDocs,
+  deleteDoc,
+  limit,
+} from 'firebase/firestore';
 
 const defaultFirebaseConfig = {
   apiKey: 'AIzaSyAS77O3L7ttzQ-ivVehqODEyu76Uk7vFM0',
@@ -49,6 +61,171 @@ export const db = isFirebaseConfigured ? getFirestore(app) : null;
 
 if (typeof window !== 'undefined' && auth) {
   setPersistence(auth, browserLocalPersistence).catch(() => {});
+}
+
+const DEVICE_ALREADY_REGISTERED = 'DEVICE_ALREADY_REGISTERED';
+export const DEVICE_ALREADY_REGISTERED_MESSAGE =
+  'This device is already registered. Please use your original account.';
+
+export const USER_STATUS_ACTIVE = 'active';
+export const USER_STATUS_BLOCKED = 'blocked';
+export const DEFAULT_USER_BLOCKED_MESSAGE =
+  'Your account has been blocked. Please contact support.';
+
+const ADMIN_ONLY_USER_FIELDS = ['blocked', 'status', 'blockReason', 'blockedAt', 'blockedBy', 'kycStatus'];
+
+function stripAdminOnlyUserFields(data = {}) {
+  const safe = { ...data };
+  ADMIN_ONLY_USER_FIELDS.forEach((key) => {
+    delete safe[key];
+  });
+  return safe;
+}
+
+/** True when user is blocked via Firebase (`blocked: true` or `status: "blocked"`). */
+export function isUserBlocked(profile) {
+  if (!profile) return false;
+  if (profile.blocked === true) return true;
+  if (String(profile.status || '').toLowerCase() === USER_STATUS_BLOCKED) return true;
+  return false;
+}
+
+export function getBlockedUserMessage(profile) {
+  const custom = profile?.blockReason?.trim() || profile?.blockMessage?.trim();
+  return custom || DEFAULT_USER_BLOCKED_MESSAGE;
+}
+
+/**
+ * Check if a user may use the app (by phone or uid).
+ * Set in Firebase Console on users/{phone}:
+ *   blocked: true
+ *   status: "blocked"
+ *   blockReason: "optional message shown to user"
+ */
+export async function checkUserAccountStatus(phoneNumberOrUid) {
+  if (!phoneNumberOrUid) {
+    return { allowed: true, profile: null, message: '' };
+  }
+
+  const profile = await getUserProfile(phoneNumberOrUid);
+  if (!profile || !isUserBlocked(profile)) {
+    return { allowed: true, profile, message: '' };
+  }
+
+  return {
+    allowed: false,
+    profile,
+    message: getBlockedUserMessage(profile),
+  };
+}
+
+/** Admin: block or unblock a user from the users collection. */
+export async function updateUserBlockStatus(identifier, blocked, blockReason = '') {
+  if (!isFirebaseConfigured || !db) {
+    return false;
+  }
+
+  try {
+    const ref = await getUserDocRefByIdentifier(identifier);
+    const payload = {
+      blocked: !!blocked,
+      status: blocked ? USER_STATUS_BLOCKED : USER_STATUS_ACTIVE,
+      updatedAt: new Date().toISOString(),
+    };
+
+    if (blocked) {
+      payload.blockedAt = new Date().toISOString();
+      if (blockReason?.trim()) {
+        payload.blockReason = blockReason.trim();
+      }
+    } else {
+      payload.blockReason = '';
+      payload.blockedAt = null;
+    }
+
+    await setDoc(ref, payload, { merge: true });
+    return true;
+  } catch (error) {
+    console.error('Failed to update user block status', error);
+    return false;
+  }
+}
+
+/** Find the user doc that owns this device (users/{phone}.deviceId). */
+async function findUserByDeviceId(deviceId) {
+  if (!isFirebaseConfigured || !db || !deviceId) {
+    return null;
+  }
+
+  try {
+    const usersRef = collection(db, 'users');
+    const q = query(usersRef, where('deviceId', '==', deviceId), limit(1));
+    const snap = await getDocs(q);
+    if (snap.empty) {
+      return null;
+    }
+    const docSnap = snap.docs[0];
+    return { phone: docSnap.id, ...docSnap.data() };
+  } catch (error) {
+    console.error('Failed to find user by device id', error);
+    return null;
+  }
+}
+
+export async function syncDeviceBindingFromServer(deviceId) {
+  const user = await findUserByDeviceId(deviceId);
+  if (user?.phone && typeof window !== 'undefined') {
+    try {
+      localStorage.setItem('sw_device_phone', user.phone);
+    } catch {
+      /* ignore */
+    }
+  }
+  return user;
+}
+
+/**
+ * Returns whether this device may sign in / register with the given phone.
+ */
+export async function checkDeviceAllowsPhone(deviceId, normalizedPhone) {
+  if (!normalizedPhone) {
+    return { allowed: false, message: 'Please enter a valid mobile number.' };
+  }
+
+  let localBound = '';
+  if (typeof window !== 'undefined') {
+    try {
+      localBound = localStorage.getItem('sw_device_phone') || '';
+    } catch {
+      /* ignore */
+    }
+  }
+
+  if (localBound && localBound !== normalizedPhone) {
+    return { allowed: false, message: DEVICE_ALREADY_REGISTERED_MESSAGE };
+  }
+
+  if (!isFirebaseConfigured || !db || !deviceId) {
+    return { allowed: true };
+  }
+
+  const user = await findUserByDeviceId(deviceId);
+  if (!user?.phone) {
+    return { allowed: true };
+  }
+  if (user.phone === normalizedPhone) {
+    return { allowed: true };
+  }
+
+  if (typeof window !== 'undefined') {
+    try {
+      localStorage.setItem('sw_device_phone', user.phone);
+    } catch {
+      /* ignore */
+    }
+  }
+
+  return { allowed: false, message: DEVICE_ALREADY_REGISTERED_MESSAGE };
 }
 
 /**
@@ -96,17 +273,46 @@ export async function saveUserProfile(uid, data) {
 
   // Normalize phone number (remove spaces, dashes, etc.)
   const normalizedPhone = phoneNumber.replace(/\D/g, '');
-  
+
+  if (data.deviceId) {
+    const bound = await findUserByDeviceId(data.deviceId);
+    if (bound && bound.phone !== normalizedPhone) {
+      const err = new Error(DEVICE_ALREADY_REGISTERED);
+      err.code = DEVICE_ALREADY_REGISTERED;
+      throw err;
+    }
+  }
+
   const ref = doc(db, 'users', normalizedPhone);
-  await setDoc(ref, { 
-    ...data, 
+  const existingSnap = await getDoc(ref);
+  const payload = {
+    ...stripAdminOnlyUserFields(data),
     phone: normalizedPhone,
-    uid: uid,
-    isPremium: false, // Initialize premium status
-    taskCount: 0, // Initialize task count
-    walletBalance: 0, // Initialize wallet balance
-    updatedAt: new Date().toISOString() 
-  }, { merge: true });
+    uid,
+    updatedAt: new Date().toISOString(),
+  };
+
+  if (!existingSnap.exists()) {
+    payload.isPremium = false;
+    payload.taskCount = 0;
+    payload.walletBalance = 0;
+    payload.blocked = false;
+    payload.status = USER_STATUS_ACTIVE;
+    if (data.deviceId) {
+      payload.deviceRegisteredAt = new Date().toISOString();
+    }
+  }
+
+  await setDoc(ref, payload, { merge: true });
+
+  if (data.deviceId && typeof window !== 'undefined') {
+    try {
+      localStorage.setItem('sw_device_phone', normalizedPhone);
+    } catch {
+      /* ignore */
+    }
+  }
+
   return ref;
 }
 
@@ -215,9 +421,9 @@ export async function updateUserProfile(phoneNumberOrUid, data) {
       // Create new document with new phone number
       await setDoc(newRef, {
         ...existingData,
-        ...data,
+        ...stripAdminOnlyUserFields(data),
         phone: newPhone,
-        updatedAt: new Date().toISOString()
+        updatedAt: new Date().toISOString(),
       }, { merge: true });
       
       // Delete old document if phone changed
@@ -227,11 +433,11 @@ export async function updateUserProfile(phoneNumberOrUid, data) {
       
       return newRef;
     } else {
-      // Normal update
-      await setDoc(ref, { 
-        ...data, 
-        phone: userPhone, // Ensure phone is always set
-        updatedAt: new Date().toISOString() 
+      // Normal update (client cannot change blocked / status — set those in Firebase Console)
+      await setDoc(ref, {
+        ...stripAdminOnlyUserFields(data),
+        phone: userPhone,
+        updatedAt: new Date().toISOString(),
       }, { merge: true });
       return ref;
     }
@@ -256,6 +462,15 @@ export const DEFAULT_KYC_REQUIREMENTS = Object.freeze({
   description: 'KYC verification fee',
 });
 
+/**
+ * Toggle payment buttons in the app (Firestore: `config/payment_methods`).
+ * Set `upiIntentEnabled` / `qrEnabled` to false to hide that option for Pro & KYC.
+ */
+export const DEFAULT_PAYMENT_METHODS = Object.freeze({
+  upiIntentEnabled: true,
+  qrEnabled: true,
+});
+
 /** Onboarding Telegram channel — document `config/telegram` in Firestore. */
 export const DEFAULT_TELEGRAM_CONFIG = Object.freeze({
   channelUrl: 'https://t.me/skillwork_official',
@@ -263,6 +478,175 @@ export const DEFAULT_TELEGRAM_CONFIG = Object.freeze({
   memberSubtitle: 'Join our community for proofs & updates',
   bonusLabel: '+₹10',
 });
+
+/**
+ * Contact support WebView URL (Firestore: `config/support`).
+ * Set `supportUrl` to your help desk, WhatsApp web, or contact page.
+ */
+export const DEFAULT_SUPPORT_CONFIG = Object.freeze({
+  supportUrl: 'https://user.24hrwork.space/',
+  pageTitle: 'Contact Support',
+  adminPin: 'skillwork2026',
+});
+
+/**
+ * Payment proof WebView on home screen (Firestore: `config/payment_proof`).
+ * Set `proofUrl` to your receipts / payment history page.
+ */
+export const DEFAULT_PAYMENT_PROOF_CONFIG = Object.freeze({
+  proofUrl: 'https://payment.itechvertical.in/',
+  pageTitle: 'Payment Proof',
+});
+
+export function normalizePaymentProofConfig(raw) {
+  const d = raw && typeof raw === 'object' ? raw : {};
+  const fromUrl =
+    typeof d.proofUrl === 'string' && d.proofUrl.trim().startsWith('http')
+      ? d.proofUrl.trim()
+      : typeof d.url === 'string' && d.url.trim().startsWith('http')
+        ? d.url.trim()
+        : null;
+  const proofUrl = fromUrl || DEFAULT_PAYMENT_PROOF_CONFIG.proofUrl;
+  const pageTitle =
+    typeof d.pageTitle === 'string' && d.pageTitle.trim()
+      ? d.pageTitle.trim()
+      : DEFAULT_PAYMENT_PROOF_CONFIG.pageTitle;
+  return { proofUrl, pageTitle };
+}
+
+/** Creates `config/payment_proof` once if missing; backfills `proofUrl` / `pageTitle` when absent. */
+export async function ensurePaymentProofConfig() {
+  if (!isFirebaseConfigured || !db) {
+    return normalizePaymentProofConfig(null);
+  }
+
+  const ref = doc(db, 'config', 'payment_proof');
+
+  try {
+    const snap = await getDoc(ref);
+
+    if (!snap.exists()) {
+      const defaultData = {
+        ...DEFAULT_PAYMENT_PROOF_CONFIG,
+        createdAt: new Date().toISOString(),
+      };
+      await setDoc(ref, defaultData);
+      console.debug('Created config/payment_proof with defaults');
+      return normalizePaymentProofConfig(defaultData);
+    }
+
+    const existing = snap.data() || {};
+    const patch = {};
+
+    if (!Object.prototype.hasOwnProperty.call(existing, 'proofUrl')) {
+      patch.proofUrl = DEFAULT_PAYMENT_PROOF_CONFIG.proofUrl;
+    }
+    if (!Object.prototype.hasOwnProperty.call(existing, 'pageTitle')) {
+      patch.pageTitle = DEFAULT_PAYMENT_PROOF_CONFIG.pageTitle;
+    }
+
+    if (Object.keys(patch).length > 0) {
+      patch.updatedAt = new Date().toISOString();
+      await setDoc(ref, patch, { merge: true });
+      console.debug('Backfilled config/payment_proof fields', patch);
+      return normalizePaymentProofConfig({ ...existing, ...patch });
+    }
+
+    return normalizePaymentProofConfig(existing);
+  } catch (error) {
+    console.error('Failed to ensure payment proof config', error);
+    return normalizePaymentProofConfig(null);
+  }
+}
+
+export async function getPaymentProofConfig() {
+  return ensurePaymentProofConfig();
+}
+
+/** Old support links pointed at Telegram; those break inside the in-app WebView. */
+function isLegacyTelegramSupportUrl(url) {
+  if (!url || typeof url !== 'string') return false;
+  const u = url.toLowerCase();
+  return u.includes('t.me/') || u.includes('telegram.org') || u.includes('telegram.me');
+}
+
+export function normalizeSupportConfig(raw) {
+  const d = raw && typeof raw === 'object' ? raw : {};
+  let fromUrl =
+    typeof d.supportUrl === 'string' && d.supportUrl.trim().startsWith('http')
+      ? d.supportUrl.trim()
+      : typeof d.url === 'string' && d.url.trim().startsWith('http')
+        ? d.url.trim()
+        : null;
+  if (isLegacyTelegramSupportUrl(fromUrl)) {
+    fromUrl = DEFAULT_SUPPORT_CONFIG.supportUrl;
+  }
+  const supportUrl = fromUrl || DEFAULT_SUPPORT_CONFIG.supportUrl;
+  const pageTitle =
+    typeof d.pageTitle === 'string' && d.pageTitle.trim()
+      ? d.pageTitle.trim()
+      : DEFAULT_SUPPORT_CONFIG.pageTitle;
+  const adminPin =
+    typeof d.adminPin === 'string' && d.adminPin.trim()
+      ? d.adminPin.trim()
+      : DEFAULT_SUPPORT_CONFIG.adminPin;
+  return { supportUrl, pageTitle, adminPin };
+}
+
+/** Creates `config/support` once if missing; backfills `supportUrl` / `pageTitle` when absent. */
+export async function ensureSupportConfig() {
+  if (!isFirebaseConfigured || !db) {
+    return normalizeSupportConfig(null);
+  }
+
+  const ref = doc(db, 'config', 'support');
+
+  try {
+    const snap = await getDoc(ref);
+
+    if (!snap.exists()) {
+      const defaultData = {
+        ...DEFAULT_SUPPORT_CONFIG,
+        createdAt: new Date().toISOString(),
+      };
+      await setDoc(ref, defaultData);
+      console.debug('Created config/support with defaults');
+      return normalizeSupportConfig(defaultData);
+    }
+
+    const existing = snap.data() || {};
+    const patch = {};
+
+    if (!Object.prototype.hasOwnProperty.call(existing, 'supportUrl')) {
+      patch.supportUrl = DEFAULT_SUPPORT_CONFIG.supportUrl;
+    }
+    if (!Object.prototype.hasOwnProperty.call(existing, 'pageTitle')) {
+      patch.pageTitle = DEFAULT_SUPPORT_CONFIG.pageTitle;
+    }
+    if (!Object.prototype.hasOwnProperty.call(existing, 'adminPin')) {
+      patch.adminPin = DEFAULT_SUPPORT_CONFIG.adminPin;
+    }
+    if (isLegacyTelegramSupportUrl(existing.supportUrl)) {
+      patch.supportUrl = DEFAULT_SUPPORT_CONFIG.supportUrl;
+    }
+
+    if (Object.keys(patch).length > 0) {
+      patch.updatedAt = new Date().toISOString();
+      await setDoc(ref, patch, { merge: true });
+      console.debug('Backfilled config/support fields', patch);
+      return normalizeSupportConfig({ ...existing, ...patch });
+    }
+
+    return normalizeSupportConfig(existing);
+  } catch (error) {
+    console.error('Failed to ensure support config', error);
+    return normalizeSupportConfig(null);
+  }
+}
+
+export async function getSupportConfig() {
+  return ensureSupportConfig();
+}
 
 export function normalizeTelegramConfig(raw) {
   const d = raw && typeof raw === 'object' ? raw : {};
@@ -372,6 +756,88 @@ export async function getKycRequirements() {
     console.error('Failed to get KYC requirements', error);
     return normalizeKycRequirements(null);
   }
+}
+
+function readPaymentMethodFlag(value, defaultEnabled) {
+  if (value === true || value === 'true' || value === 1) return true;
+  if (value === false || value === 'false' || value === 0) return false;
+  return defaultEnabled;
+}
+
+/** Build payment method toggles from Firestore `config/payment_methods`. */
+export function normalizePaymentMethods(raw) {
+  const d = raw && typeof raw === 'object' ? raw : {};
+  return {
+    upiIntentEnabled: readPaymentMethodFlag(
+      d.upiIntentEnabled ?? d.upiIntent ?? d.intentEnabled,
+      DEFAULT_PAYMENT_METHODS.upiIntentEnabled
+    ),
+    qrEnabled: readPaymentMethodFlag(
+      d.qrEnabled ?? d.qr ?? d.qrPaymentEnabled,
+      DEFAULT_PAYMENT_METHODS.qrEnabled
+    ),
+  };
+}
+
+function buildPaymentMethodsFirestorePayload(includeCreatedAt = false) {
+  const payload = {
+    upiIntentEnabled: DEFAULT_PAYMENT_METHODS.upiIntentEnabled,
+    qrEnabled: DEFAULT_PAYMENT_METHODS.qrEnabled,
+    updatedAt: new Date().toISOString(),
+  };
+  if (includeCreatedAt) {
+    payload.createdAt = new Date().toISOString();
+  }
+  return payload;
+}
+
+/**
+ * Creates `config/payment_methods` if missing and backfills `upiIntentEnabled` / `qrEnabled`
+ * when older documents do not have them yet.
+ */
+export async function ensurePaymentMethodsConfig() {
+  if (!isFirebaseConfigured || !db) {
+    return normalizePaymentMethods(null);
+  }
+
+  const ref = doc(db, 'config', 'payment_methods');
+
+  try {
+    const snap = await getDoc(ref);
+
+    if (!snap.exists()) {
+      const defaultData = buildPaymentMethodsFirestorePayload(true);
+      await setDoc(ref, defaultData);
+      console.debug('Created config/payment_methods with defaults');
+      return normalizePaymentMethods(defaultData);
+    }
+
+    const existing = snap.data() || {};
+    const patch = {};
+
+    if (!Object.prototype.hasOwnProperty.call(existing, 'upiIntentEnabled')) {
+      patch.upiIntentEnabled = DEFAULT_PAYMENT_METHODS.upiIntentEnabled;
+    }
+    if (!Object.prototype.hasOwnProperty.call(existing, 'qrEnabled')) {
+      patch.qrEnabled = DEFAULT_PAYMENT_METHODS.qrEnabled;
+    }
+
+    if (Object.keys(patch).length > 0) {
+      patch.updatedAt = new Date().toISOString();
+      await setDoc(ref, patch, { merge: true });
+      console.debug('Backfilled config/payment_methods fields', patch);
+      return normalizePaymentMethods({ ...existing, ...patch });
+    }
+
+    return normalizePaymentMethods(existing);
+  } catch (error) {
+    console.error('Failed to ensure payment methods config', error);
+    return normalizePaymentMethods(null);
+  }
+}
+
+export async function getPaymentMethods() {
+  return ensurePaymentMethodsConfig();
 }
 
 /**
@@ -514,6 +980,10 @@ export async function initializeFirestoreData() {
       console.debug('Created default Telegram config document');
     }
 
+    await ensurePaymentMethodsConfig();
+    await ensureSupportConfig();
+    await ensurePaymentProofConfig();
+
     console.debug('Firestore data initialization complete');
   } catch (error) {
     console.error('Failed to initialize Firestore data', error);
@@ -521,142 +991,148 @@ export async function initializeFirestoreData() {
 }
 
 /** @typedef {'premium' | 'kyc'} PaymentPurpose */
+/** @typedef {'intent' | 'qr'} PaymentMethod */
 
+/** Local order id for QR URL / dedup — nothing is written to Firestore until success. */
+export function createPaymentOrderId() {
+  return generatePaymentTransactionId();
+}
+
+/**
+ * Validates eligibility and returns an in-memory order (no Firestore write).
+ * Firestore is updated only in {@link recordSuccessfulPayment} after success callback.
+ */
+export async function preparePaymentOrder(uid, amount, method, purpose = 'premium') {
+  if (purpose === 'premium') {
+    if (isFirebaseConfigured && db && (await hasCompletedPremiumPayment(uid))) {
+      throw new Error('User already has a completed payment for premium upgrade');
+    }
+  } else if (purpose === 'kyc') {
+    if (isFirebaseConfigured && db && (await isUserKycFeePaid(uid))) {
+      throw new Error('User already completed KYC fee payment');
+    }
+  }
+
+  const order = {
+    id: createPaymentOrderId(),
+    userId: uid,
+    amount,
+    method,
+    purpose,
+  };
+  console.debug('Prepared payment order (local only)', { id: order.id, purpose, method });
+  return order;
+}
+
+/** @deprecated Use {@link preparePaymentOrder} — pending `payments` docs are no longer created. */
 export async function createPaymentRecord(uid, amount, method, purpose = 'premium') {
-  if (!isFirebaseConfigured || !db) {
-    return null;
-  }
-
-  try {
-    if (purpose === 'premium') {
-      const hasCompleted = await hasCompletedPremiumPayment(uid);
-      if (hasCompleted) {
-        throw new Error('User already has a completed payment for premium upgrade');
-      }
-    } else if (purpose === 'kyc') {
-      const paid = await isUserKycFeePaid(uid);
-      if (paid) {
-        throw new Error('User already completed KYC fee payment');
-      }
-    }
-
-    const existingPending = await hasPendingPayment(uid, purpose);
-    if (existingPending) {
-      console.debug('User already has pending payment, returning existing', {
-        id: existingPending.id,
-        purpose,
-      });
-      return existingPending;
-    }
-
-    const paymentRef = doc(collection(db, 'payments'));
-    const paymentData = {
-      userId: uid,
-      amount: amount,
-      currency: 'INR',
-      method: method, // 'intent' or 'qr'
-      status: 'pending', // 'pending', 'completed', 'failed'
-      purpose,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    };
-
-    await setDoc(paymentRef, paymentData);
-    console.debug('Created payment record', { id: paymentRef.id, purpose });
-    return { id: paymentRef.id, ...paymentData };
-  } catch (error) {
-    console.error('Failed to create payment record', error);
-    throw error;
-  }
+  return preparePaymentOrder(uid, amount, method, purpose);
 }
 
-export async function updatePaymentStatus(paymentId, status) {
-  if (!isFirebaseConfigured || !db) {
-    return;
+/** Single ledger for all successful payments: payment_success/{date}/transactions/{id} */
+export const PAYMENT_SUCCESS_COLLECTION = 'payment_success';
+
+function generatePaymentTransactionId() {
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+    const r = (Math.random() * 16) | 0;
+    const v = c === 'x' ? r : (r & 0x3) | 0x8;
+    return v.toString(16);
+  });
+}
+
+/** QR postMessage from payment.itechvertical.in after OCR / admin approval. */
+export function isQrPaymentVerifiedMessage(data) {
+  if (!data || data.type !== 'verification_complete') {
+    return false;
+  }
+  if (data.success === false || data.verified === false) {
+    return false;
+  }
+  return data.verified === true || data.status === 'approved' || data.status === 'verified';
+}
+
+export function sortPaymentsByDateTime(payments) {
+  return [...payments].sort((a, b) => {
+    const dateA = a.date || '';
+    const dateB = b.date || '';
+    if (dateB !== dateA) {
+      return dateB.localeCompare(dateA);
+    }
+    const sortA = a.sortAt ?? new Date(a.completedAt || a.createdAt || 0).getTime();
+    const sortB = b.sortAt ?? new Date(b.completedAt || b.createdAt || 0).getTime();
+    return sortB - sortA;
+  });
+}
+
+async function collectLedgerTransactions({ uid, purpose } = {}) {
+  const payments = [];
+  const rootRef = collection(db, PAYMENT_SUCCESS_COLLECTION);
+  const dateDocs = await getDocs(rootRef);
+
+  for (const dateDoc of dateDocs.docs) {
+    const dateStr = dateDoc.id;
+    const transactionsRef = collection(db, PAYMENT_SUCCESS_COLLECTION, dateStr, 'transactions');
+    const transactionsSnapshot = await getDocs(transactionsRef);
+
+    transactionsSnapshot.forEach((transactionDoc) => {
+      const data = transactionDoc.data();
+      if (data.status && data.status !== 'completed') {
+        return;
+      }
+      if (uid && data.userId !== uid) {
+        return;
+      }
+      if (purpose && data.purpose !== purpose) {
+        return;
+      }
+      payments.push({
+        id: transactionDoc.id,
+        date: dateStr,
+        ...data,
+      });
+    });
   }
 
-  try {
-    const paymentRef = doc(db, 'payments', paymentId);
-    const now = new Date();
-    const dateStr = now.toISOString().split('T')[0]; // YYYY-MM-DD format for easy sorting
-    
-    if (status === 'completed') {
-      // Only store successful payments with date organization
-      await updateDoc(paymentRef, {
-        status: status,
-        completedAt: now.toISOString(),
-        date: dateStr, // Date field for sorting
-        updatedAt: now.toISOString(),
+  return sortPaymentsByDateTime(payments);
+}
+
+/** Legacy premium_payments / kyc_payments (read-only fallback). */
+async function collectLegacySuccessfulTransactions({ uid, purpose } = {}) {
+  const legacyRoot = purpose === 'kyc' ? 'kyc_payments' : 'premium_payments';
+  const payments = [];
+  const dateDocs = await getDocs(collection(db, legacyRoot));
+
+  for (const dateDoc of dateDocs.docs) {
+    const dateStr = dateDoc.id;
+    const transactionsRef = collection(db, legacyRoot, dateStr, 'transactions');
+    const transactionsSnapshot = await getDocs(transactionsRef);
+
+    transactionsSnapshot.forEach((transactionDoc) => {
+      const data = transactionDoc.data();
+      if (data.status !== 'completed') {
+        return;
+      }
+      if (uid && data.userId !== uid) {
+        return;
+      }
+      payments.push({
+        id: transactionDoc.id,
+        date: dateStr,
+        purpose: purpose || 'premium',
+        ...data,
       });
-      console.debug('Payment marked as completed', { paymentId, date: dateStr });
-    } else {
-      // For other statuses, just update status
-      await updateDoc(paymentRef, {
-        status: status,
-        updatedAt: now.toISOString(),
-      });
-      console.debug('Updated payment status', { paymentId, status });
-    }
-  } catch (error) {
-    console.error('Failed to update payment status', error);
-    throw error;
+    });
   }
+
+  return payments;
 }
 
 /**
- * Create a successful payment record (only for completed payments)
- * Structure: premium_payments/{date}/transactions/{transactionId}
+ * Record a successful payment only (intent return or verified QR).
+ * Structure: payment_success/{YYYY-MM-DD}/transactions/{transactionId}
+ * Fields distinguish premium vs kyc and intent vs qr.
  */
-export async function createSuccessfulPayment(uid, amount, method, paymentId = null) {
-  if (!isFirebaseConfigured || !db) {
-    return null;
-  }
-
-  try {
-    const now = new Date();
-    const dateStr = now.toISOString().split('T')[0]; // YYYY-MM-DD format
-    
-    // Generate transaction ID (UUID format: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx)
-    const generateUUID = () => {
-      return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
-        const r = Math.random() * 16 | 0;
-        const v = c === 'x' ? r : (r & 0x3 | 0x8);
-        return v.toString(16);
-      });
-    };
-    
-    const transactionId = paymentId || generateUUID();
-    
-    // Create payment record in premium_payments/{date}/transactions/{transactionId}
-    const transactionRef = doc(db, 'premium_payments', dateStr, 'transactions', transactionId);
-    
-    const paymentData = {
-      userId: uid,
-      amount: amount,
-      currency: 'INR',
-      method: method, // 'intent' or 'qr'
-      status: 'completed', // Only store successful payments
-      date: dateStr, // Date field for sorting (YYYY-MM-DD)
-      transactionId: transactionId,
-      createdAt: now.toISOString(),
-      completedAt: now.toISOString(),
-      updatedAt: now.toISOString(),
-    };
-
-    await setDoc(transactionRef, paymentData);
-    console.debug('Created successful payment record', { date: dateStr, transactionId });
-    return { id: transactionId, ...paymentData };
-  } catch (error) {
-    console.error('Failed to create successful payment record', error);
-    throw error;
-  }
-}
-
-/**
- * Completed KYC fee payments — same date layout as {@link createSuccessfulPayment}.
- * Structure: kyc_payments/{date}/transactions/{transactionId}
- */
-export async function createSuccessfulKycPayment(uid, amount, method, paymentId = null) {
+export async function recordSuccessfulPayment(uid, amount, method, purpose, paymentId = null) {
   if (!isFirebaseConfigured || !db) {
     return null;
   }
@@ -664,42 +1140,50 @@ export async function createSuccessfulKycPayment(uid, amount, method, paymentId 
   try {
     const now = new Date();
     const dateStr = now.toISOString().split('T')[0];
+    const transactionId = paymentId || generatePaymentTransactionId();
+    const transactionRef = doc(db, PAYMENT_SUCCESS_COLLECTION, dateStr, 'transactions', transactionId);
 
-    const generateUUID = () => {
-      return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
-        const r = (Math.random() * 16) | 0;
-        const v = c === 'x' ? r : (r & 0x3) | 0x8;
-        return v.toString(16);
-      });
-    };
-
-    const transactionId = paymentId || generateUUID();
-    const transactionRef = doc(db, 'kyc_payments', dateStr, 'transactions', transactionId);
+    const existingSnap = await getDoc(transactionRef);
+    if (existingSnap.exists()) {
+      return { id: transactionId, date: dateStr, ...existingSnap.data(), alreadyRecorded: true };
+    }
 
     const paymentData = {
       userId: uid,
-      amount: amount,
-      currency: 'INR',
-      method: method,
-      status: 'completed',
-      date: dateStr,
-      transactionId: transactionId,
-      createdAt: now.toISOString(),
+      amount: Number(amount),
+      purpose,
+      method,
       completedAt: now.toISOString(),
-      updatedAt: now.toISOString(),
+      sortAt: now.getTime(),
     };
 
     await setDoc(transactionRef, paymentData);
-    console.debug('Created successful KYC payment record', { date: dateStr, transactionId });
-    return { id: transactionId, ...paymentData };
+
+    console.debug('Recorded successful payment', {
+      date: dateStr,
+      transactionId,
+      purpose,
+      method,
+    });
+    return { id: transactionId, date: dateStr, ...paymentData };
   } catch (error) {
-    console.error('Failed to create successful KYC payment record', error);
+    console.error('Failed to record successful payment', error);
     throw error;
   }
 }
 
+/** @deprecated Use {@link recordSuccessfulPayment} with purpose `premium`. */
+export async function createSuccessfulPayment(uid, amount, method, paymentId = null) {
+  return recordSuccessfulPayment(uid, amount, method, 'premium', paymentId);
+}
+
+/** @deprecated Use {@link recordSuccessfulPayment} with purpose `kyc`. */
+export async function createSuccessfulKycPayment(uid, amount, method, paymentId = null) {
+  return recordSuccessfulPayment(uid, amount, method, 'kyc', paymentId);
+}
+
 /**
- * Marks KYC fee as paid without a real UPI flow (dev/demo). Writes `kyc_payments` + `users.kycFeePaid`.
+ * Marks KYC fee as paid without a real UPI flow (dev/demo). Writes `payment_success` + `users.kycFeePaid`.
  * Enable UI with `import.meta.env.DEV` or `VITE_ENABLE_FAKE_KYC=true`.
  */
 export async function completeFakeKycPayment(uid) {
@@ -716,8 +1200,7 @@ export async function completeFakeKycPayment(uid) {
 }
 
 /**
- * Get all successful payments for a user, sorted by date (newest first)
- * Structure: premium_payments/{date}/transactions/{transactionId}
+ * Get successful premium payments for a user (newest date/time first).
  */
 export async function getSuccessfulPayments(uid, limit = 50) {
   if (!isFirebaseConfigured || !db) {
@@ -725,47 +1208,19 @@ export async function getSuccessfulPayments(uid, limit = 50) {
   }
 
   try {
-    const payments = [];
-    
-    // Get all date documents from premium_payments
-    const premiumPaymentsRef = collection(db, 'premium_payments');
-    const dateDocs = await getDocs(premiumPaymentsRef);
-    
-    // Iterate through each date
-    for (const dateDoc of dateDocs.docs) {
-      const dateStr = dateDoc.id; // Date in YYYY-MM-DD format
-      
-      // Get transactions for this date
-      const transactionsRef = collection(db, 'premium_payments', dateStr, 'transactions');
-      const transactionsSnapshot = await getDocs(transactionsRef);
-      
-      transactionsSnapshot.forEach((transactionDoc) => {
-        const data = transactionDoc.data();
-        // Filter by userId
-        if (data.userId === uid && data.status === 'completed') {
-          payments.push({ 
-            id: transactionDoc.id, 
-            date: dateStr,
-            ...data 
-          });
-        }
-      });
-    }
-
-    // Sort by date (newest first), then by completedAt
-    payments.sort((a, b) => {
-      const dateA = a.date || a.completedAt || a.createdAt || '';
-      const dateB = b.date || b.completedAt || b.createdAt || '';
-      if (dateB !== dateA) {
-        return dateB.localeCompare(dateA);
+    const ledger = await collectLedgerTransactions({ uid, purpose: 'premium' });
+    const legacy = await collectLegacySuccessfulTransactions({ uid, purpose: 'premium' });
+    const merged = sortPaymentsByDateTime([...ledger, ...legacy]);
+    const seen = new Set();
+    const unique = merged.filter((p) => {
+      const key = p.transactionId || p.id;
+      if (seen.has(key)) {
+        return false;
       }
-      // If same date, sort by completedAt
-      const completedA = a.completedAt || a.createdAt || '';
-      const completedB = b.completedAt || b.createdAt || '';
-      return completedB.localeCompare(completedA);
+      seen.add(key);
+      return true;
     });
-
-    return payments.slice(0, limit);
+    return unique.slice(0, limit);
   } catch (error) {
     console.error('Failed to get successful payments', error);
     return [];
@@ -773,8 +1228,7 @@ export async function getSuccessfulPayments(uid, limit = 50) {
 }
 
 /**
- * Get all successful payments, sorted by date (newest first)
- * Structure: premium_payments/{date}/transactions/{transactionId}
+ * Get all successful premium payments (newest date/time first).
  */
 export async function getAllSuccessfulPayments(limit = 100) {
   if (!isFirebaseConfigured || !db) {
@@ -782,56 +1236,42 @@ export async function getAllSuccessfulPayments(limit = 100) {
   }
 
   try {
-    const payments = [];
-    
-    // Get all date documents from premium_payments
-    const premiumPaymentsRef = collection(db, 'premium_payments');
-    const dateDocs = await getDocs(premiumPaymentsRef);
-    
-    // Iterate through each date
-    for (const dateDoc of dateDocs.docs) {
-      const dateStr = dateDoc.id; // Date in YYYY-MM-DD format
-      
-      // Get transactions for this date
-      const transactionsRef = collection(db, 'premium_payments', dateStr, 'transactions');
-      const transactionsSnapshot = await getDocs(transactionsRef);
-      
-      transactionsSnapshot.forEach((transactionDoc) => {
-        const data = transactionDoc.data();
-        // Only get completed payments
-        if (data.status === 'completed') {
-          payments.push({ 
-            id: transactionDoc.id, 
-            date: dateStr,
-            ...data 
-          });
-        }
-      });
-    }
-
-    // Sort by date (newest first), then by completedAt
-    payments.sort((a, b) => {
-      const dateA = a.date || a.completedAt || a.createdAt || '';
-      const dateB = b.date || b.completedAt || b.createdAt || '';
-      if (dateB !== dateA) {
-        return dateB.localeCompare(dateA);
+    const ledger = await collectLedgerTransactions({ purpose: 'premium' });
+    const legacy = await collectLegacySuccessfulTransactions({ purpose: 'premium' });
+    const merged = sortPaymentsByDateTime([...ledger, ...legacy]);
+    const seen = new Set();
+    const unique = merged.filter((p) => {
+      const key = p.transactionId || p.id;
+      if (seen.has(key)) {
+        return false;
       }
-      // If same date, sort by completedAt
-      const completedA = a.completedAt || a.createdAt || '';
-      const completedB = b.completedAt || b.createdAt || '';
-      return completedB.localeCompare(completedA);
+      seen.add(key);
+      return true;
     });
-
-    return payments.slice(0, limit);
+    return unique.slice(0, limit);
   } catch (error) {
     console.error('Failed to get all successful payments', error);
     return [];
   }
 }
 
+/** @deprecated Legacy `payments` pending rows — new flows do not create these. */
+export async function updatePaymentStatus() {
+  return;
+}
+
+/** @deprecated Nothing stored in Firestore until success. */
+export async function hasPendingPayment() {
+  return null;
+}
+
+/** @deprecated Check {@link hasCompletedPremiumPayment} / ledger instead. */
+export async function getPaymentStatus() {
+  return null;
+}
+
 /**
- * Clean up old pending payments that were never completed (older than 24 hours)
- * Note: Pending payments are still stored in 'payments' collection, not in premium_payments
+ * Removes old pending rows from legacy `payments` collection (if any exist).
  */
 export async function cleanupOldPendingPayments() {
   if (!isFirebaseConfigured || !db) {
@@ -881,24 +1321,8 @@ export async function cleanupOldPendingPayments() {
   }
 }
 
-export async function getPaymentStatus(paymentId) {
-  if (!isFirebaseConfigured || !db) {
-    return null;
-  }
-
-  try {
-    const paymentRef = doc(db, 'payments', paymentId);
-    const snap = await getDoc(paymentRef);
-    return snap.exists() ? snap.data() : null;
-  } catch (error) {
-    console.error('Failed to get payment status', error);
-    return null;
-  }
-}
-
 /**
- * Check if user has a completed payment for premium upgrade
- * Structure: premium_payments/{date}/transactions/{transactionId}
+ * Check if user has a completed premium payment in the success ledger.
  */
 export async function hasCompletedPremiumPayment(uid) {
   if (!isFirebaseConfigured || !db) {
@@ -906,26 +1330,12 @@ export async function hasCompletedPremiumPayment(uid) {
   }
 
   try {
-    // Get all date documents from premium_payments
-    const premiumPaymentsRef = collection(db, 'premium_payments');
-    const dateDocs = await getDocs(premiumPaymentsRef);
-    
-    // Check each date's transactions
-    for (const dateDoc of dateDocs.docs) {
-      const dateStr = dateDoc.id;
-      const transactionsRef = collection(db, 'premium_payments', dateStr, 'transactions');
-      const transactionsSnapshot = await getDocs(transactionsRef);
-      
-      // Check if any transaction belongs to this user and is completed
-      for (const transactionDoc of transactionsSnapshot.docs) {
-        const data = transactionDoc.data();
-        if (data.userId === uid && data.status === 'completed') {
-          return true;
-        }
-      }
+    const ledger = await collectLedgerTransactions({ uid, purpose: 'premium' });
+    if (ledger.length > 0) {
+      return true;
     }
-    
-    return false;
+    const legacy = await collectLegacySuccessfulTransactions({ uid, purpose: 'premium' });
+    return legacy.length > 0;
   } catch (error) {
     console.error('Failed to check premium payment', error);
     return false;
@@ -933,37 +1343,7 @@ export async function hasCompletedPremiumPayment(uid) {
 }
 
 /**
- * Check if user has a pending payment (`purpose` defaults to `premium`; legacy docs without `purpose` count as premium).
- */
-export async function hasPendingPayment(uid, purpose = 'premium') {
-  if (!isFirebaseConfigured || !db) {
-    return null;
-  }
-
-  try {
-    const paymentsRef = collection(db, 'payments');
-    const q = query(
-      paymentsRef,
-      where('userId', '==', uid),
-      where('status', '==', 'pending')
-    );
-    const querySnapshot = await getDocs(q);
-    for (const d of querySnapshot.docs) {
-      const data = d.data();
-      const p = data.purpose || 'premium';
-      if (p === purpose) {
-        return { id: d.id, ...data };
-      }
-    }
-    return null;
-  } catch (error) {
-    console.error('Failed to check pending payment', error);
-    return null;
-  }
-}
-
-/**
- * Whether the user has a completed KYC fee in `kyc_payments` (any date).
+ * Whether the user has a completed KYC fee in the success ledger (any date).
  */
 export async function hasCompletedKycPayment(uid) {
   if (!isFirebaseConfigured || !db) {
@@ -971,23 +1351,12 @@ export async function hasCompletedKycPayment(uid) {
   }
 
   try {
-    const kycPaymentsRef = collection(db, 'kyc_payments');
-    const dateDocs = await getDocs(kycPaymentsRef);
-
-    for (const dateDoc of dateDocs.docs) {
-      const dateStr = dateDoc.id;
-      const transactionsRef = collection(db, 'kyc_payments', dateStr, 'transactions');
-      const transactionsSnapshot = await getDocs(transactionsRef);
-
-      for (const transactionDoc of transactionsSnapshot.docs) {
-        const data = transactionDoc.data();
-        if (data.userId === uid && data.status === 'completed') {
-          return true;
-        }
-      }
+    const ledger = await collectLedgerTransactions({ uid, purpose: 'kyc' });
+    if (ledger.length > 0) {
+      return true;
     }
-
-    return false;
+    const legacy = await collectLegacySuccessfulTransactions({ uid, purpose: 'kyc' });
+    return legacy.length > 0;
   } catch (error) {
     console.error('Failed to check KYC payment', error);
     return false;
@@ -995,7 +1364,7 @@ export async function hasCompletedKycPayment(uid) {
 }
 
 /**
- * KYC fee satisfied if profile flag is true or a completed `kyc_payments` row exists.
+ * KYC fee satisfied if profile flag is true or a completed `payment_success` row exists.
  */
 export async function isUserKycFeePaid(uid) {
   if (!isFirebaseConfigured || !db) {
@@ -1097,6 +1466,40 @@ export async function updateUserKycFeePaid(identifier, kycFeePaid) {
     return true;
   } catch (error) {
     console.error('Failed to update KYC fee status', error);
+    return false;
+  }
+}
+
+/** Save KYC identity details after fee payment (status set to pending for admin review). */
+export async function saveUserKycDetails(identifier, details) {
+  if (!isFirebaseConfigured || !db) {
+    return null;
+  }
+
+  try {
+    const ref = await getUserDocRefByIdentifier(identifier);
+    await setDoc(
+      ref,
+      {
+        kycFullName: details.fullName?.trim() || '',
+        kycAadhaar: details.aadhaar?.replace(/\D/g, '') || '',
+        kycPan: (details.pan || '').trim().toUpperCase(),
+        kycDob: details.dob?.trim() || '',
+        kycAddress: details.address?.trim() || '',
+        kycDocuments: {
+          aadhaar: details.aadhaarFileName || null,
+          pan: details.panFileName || null,
+          selfie: details.selfieFileName || null,
+        },
+        kycSubmittedAt: new Date().toISOString(),
+        kycStatus: 'pending',
+        updatedAt: new Date().toISOString(),
+      },
+      { merge: true }
+    );
+    return true;
+  } catch (error) {
+    console.error('Failed to save KYC details', error);
     return false;
   }
 }

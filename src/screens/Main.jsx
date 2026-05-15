@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import HomeTab from './tabs/HomeTab';
 import TaskTab from './tabs/TaskTab';
@@ -9,8 +10,9 @@ import AnalyticsTab from './tabs/AnalyticsTab';
 import WithdrawSheet from './tabs/WithdrawSheet';
 import AchievementsTab from './tabs/AchievementsTab';
 import { useLang } from '../i18n/LangContext';
-import { getUserProfile, isUserPremium, updateUserTaskCount, updateUserWalletBalance, isFirebaseConfigured, db, getProPricing, DEFAULT_PRO_PRICING, getKycRequirements, DEFAULT_KYC_REQUIREMENTS, isUserKycFeePaid, completeFakeKycPayment } from '../firebase';
+import { getUserProfile, isUserPremium, updateUserTaskCount, updateUserWalletBalance, isFirebaseConfigured, db, getProPricing, DEFAULT_PRO_PRICING, getKycRequirements, DEFAULT_KYC_REQUIREMENTS, isUserKycFeePaid, completeFakeKycPayment, isUserBlocked, getBlockedUserMessage } from '../firebase';
 import { doc, onSnapshot } from 'firebase/firestore';
+import { clearUserSession, setStoredBlockMessage } from '../utils/accountSession';
 
 const SHOW_FAKE_KYC =
   import.meta.env.DEV || import.meta.env.VITE_ENABLE_FAKE_KYC === 'true';
@@ -42,6 +44,7 @@ const LangToggle = () => {
 
 /* ─── Inner Main (uses lang context) ────────────────────────────────────────── */
 const MainInner = () => {
+  const navigate = useNavigate();
   const { t, lang } = useLang();
   const userName = localStorage.getItem('sw_name') || 'Aman';
   const userId = localStorage.getItem('sw_userId');
@@ -63,6 +66,13 @@ const MainInner = () => {
   const [proPricing, setProPricing] = useState(() => ({ ...DEFAULT_PRO_PRICING }));
   const [kycRequirements, setKycRequirements] = useState(() => ({ ...DEFAULT_KYC_REQUIREMENTS }));
   const [kycFeePaid, setKycFeePaid] = useState(false);
+
+  const redirectIfBlocked = (userData) => {
+    if (!isUserBlocked(userData)) return;
+    setStoredBlockMessage(getBlockedUserMessage(userData));
+    clearUserSession();
+    navigate('/blocked', { replace: true });
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -94,6 +104,11 @@ const MainInner = () => {
       try {
         const userProfile = await getUserProfile(userPhone || userId);
         if (userProfile) {
+          if (isUserBlocked(userProfile)) {
+            redirectIfBlocked(userProfile);
+            return;
+          }
+
           // Update premium status
           const premiumStatus = await isUserPremium(userId);
           setIsPro(premiumStatus);
@@ -129,10 +144,15 @@ const MainInner = () => {
     const normalizedPhone = userPhone.replace(/\D/g, '');
     const userDocRef = doc(db, 'users', normalizedPhone);
     
-    const unsubscribe = onSnapshot(userDocRef, (doc) => {
-      if (doc.exists()) {
-        const userData = doc.data();
-        
+    const unsubscribe = onSnapshot(userDocRef, (docSnap) => {
+      if (docSnap.exists()) {
+        const userData = docSnap.data();
+
+        if (isUserBlocked(userData)) {
+          redirectIfBlocked(userData);
+          return;
+        }
+
         // Update premium status if changed
         if (userData.isPremium !== undefined) {
           setIsPro(userData.isPremium);

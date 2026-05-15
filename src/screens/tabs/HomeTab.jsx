@@ -1,7 +1,12 @@
 import { useState } from 'react';
 import { useLang } from '../../i18n/LangContext';
+import PaymentWebView from '../../components/PaymentWebView';
+import { getPaymentProofConfig } from '../../firebase';
+
 const HomeTab = ({ userName, isPro, balance = 0, completedCount = 0, onStartWork, onWithdraw, onStreakClaim }) => {
   const { t } = useLang();
+  const [proofWebView, setProofWebView] = useState(null);
+  const [proofOpening, setProofOpening] = useState(false);
   const today = new Date();
   const todayStr = today.toISOString().slice(0, 10);
   const [claimedStreak, setClaimedStreak] = useState(() => localStorage.getItem('sw_streak_claim_date') === todayStr);
@@ -49,6 +54,34 @@ const HomeTab = ({ userName, isPro, balance = 0, completedCount = 0, onStartWork
     onStreakClaim(dailyReward);
     localStorage.setItem('sw_streak_claim_date', todayStr);
     setClaimedStreak(true);
+  };
+
+  const handlePaymentProof = async () => {
+    if (proofOpening) return;
+    setProofOpening(true);
+    try {
+      const config = await getPaymentProofConfig();
+      if (!config.proofUrl?.startsWith('http')) {
+        window.alert(t('payment_proof_url_missing'));
+        return;
+      }
+      const userId = localStorage.getItem('sw_userId');
+      const url = new URL(config.proofUrl);
+      if (userId) {
+        url.searchParams.set('userId', userId);
+      }
+      url.searchParams.set('embed', '1');
+      setProofWebView({
+        url: url.toString(),
+        title: config.pageTitle || t('payment_proof'),
+        subtitle: t('payment_proof_sub'),
+      });
+    } catch (err) {
+      console.error('Payment proof', err);
+      window.alert(t('payment_proof_url_missing'));
+    } finally {
+      setProofOpening(false);
+    }
   };
 
   return (
@@ -219,6 +252,61 @@ const HomeTab = ({ userName, isPro, balance = 0, completedCount = 0, onStartWork
           </div>
         ))}
       </div>
+
+      {/* ── PAYMENT PROOF ── */}
+      <button
+        type="button"
+        className="card animate-fade-up"
+        onClick={handlePaymentProof}
+        disabled={proofOpening}
+        style={{
+          width: '100%',
+          display: 'flex',
+          alignItems: 'center',
+          gap: 14,
+          padding: '16px 18px',
+          marginBottom: 24,
+          animationDelay: '0.26s',
+          border: '1px solid var(--border-color)',
+          background: '#fff',
+          cursor: proofOpening ? 'wait' : 'pointer',
+          textAlign: 'left',
+        }}
+      >
+        <div
+          style={{
+            width: 44,
+            height: 44,
+            borderRadius: 14,
+            background: 'rgba(67,97,238,0.1)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            fontSize: 22,
+            flexShrink: 0,
+          }}
+        >
+          🧾
+        </div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: 15, fontWeight: 800, color: 'var(--text-primary)', fontFamily: 'var(--font-display)' }}>
+            {t('payment_proof')}
+          </div>
+          <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 2 }}>
+            {proofOpening ? '…' : t('payment_proof_sub')}
+          </div>
+        </div>
+        <span style={{ fontSize: 18, color: 'var(--text-muted)', flexShrink: 0 }}>›</span>
+      </button>
+
+      {proofWebView && (
+        <PaymentWebView
+          url={proofWebView.url}
+          title={proofWebView.title}
+          subtitle={proofWebView.subtitle}
+          onClose={() => setProofWebView(null)}
+        />
+      )}
 
     </div>
   );

@@ -1,11 +1,25 @@
 import { useState, useEffect } from 'react';
-import { getAllUsers, updateUserPremiumStatus, updateUserTaskCount, updateUserWalletBalance, isFirebaseConfigured } from '../../firebase';
+import {
+  getAllUsers,
+  updateUserPremiumStatus,
+  updateUserTaskCount,
+  updateUserWalletBalance,
+  updateUserBlockStatus,
+  isUserBlocked,
+  isFirebaseConfigured,
+} from '../../firebase';
 
 const AdminTab = () => {
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [editingUser, setEditingUser] = useState(null);
-  const [editData, setEditData] = useState({ isPremium: false, taskCount: 0, walletBalance: 0 });
+  const [editData, setEditData] = useState({
+    isPremium: false,
+    taskCount: 0,
+    walletBalance: 0,
+    blocked: false,
+    blockReason: '',
+  });
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState('');
 
@@ -35,6 +49,8 @@ const AdminTab = () => {
       isPremium: user.isPremium || false,
       taskCount: user.taskCount || 0,
       walletBalance: user.walletBalance || 0,
+      blocked: isUserBlocked(user),
+      blockReason: user.blockReason || '',
     });
   };
 
@@ -48,11 +64,19 @@ const AdminTab = () => {
       await updateUserPremiumStatus(editingUser, editData.isPremium);
       await updateUserTaskCount(editingUser, editData.taskCount);
       await updateUserWalletBalance(editingUser, editData.walletBalance);
-      
-      // Update local state
-      setUsers(users.map(user => 
-        user.id === editingUser 
-          ? { ...user, ...editData }
+      await updateUserBlockStatus(editingUser, editData.blocked, editData.blockReason);
+
+      setUsers(users.map(user =>
+        user.id === editingUser
+          ? {
+              ...user,
+              isPremium: editData.isPremium,
+              taskCount: editData.taskCount,
+              walletBalance: editData.walletBalance,
+              blocked: editData.blocked,
+              status: editData.blocked ? 'blocked' : 'active',
+              blockReason: editData.blockReason,
+            }
           : user
       ));
       
@@ -64,6 +88,27 @@ const AdminTab = () => {
     } catch (error) {
       console.error('Failed to update user', error);
       setMessage('❌ Failed to update user data');
+      setTimeout(() => setMessage(''), 3000);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleQuickBlockUpdate = async (user, nextBlocked) => {
+    setSaving(true);
+    setMessage('');
+    try {
+      await updateUserBlockStatus(user.id, nextBlocked, user.blockReason || '');
+      setUsers(users.map((item) =>
+        item.id === user.id
+          ? { ...item, blocked: nextBlocked, status: nextBlocked ? 'blocked' : 'active' }
+          : item
+      ));
+      setMessage(nextBlocked ? '🚫 User blocked' : '✅ User unblocked');
+      setTimeout(() => setMessage(''), 3000);
+    } catch (error) {
+      console.error('Failed to update block status', error);
+      setMessage('❌ Failed to update block status');
       setTimeout(() => setMessage(''), 3000);
     } finally {
       setSaving(false);
@@ -132,7 +177,7 @@ const AdminTab = () => {
       <div style={{ background: 'var(--bg-secondary)', borderRadius: '12px', overflow: 'hidden' }}>
         <div style={{ 
           display: 'grid', 
-          gridTemplateColumns: '1fr 1fr 100px 100px 100px 120px', 
+          gridTemplateColumns: '1fr 1fr 72px 72px 72px 72px 160px', 
           gap: '16px',
           padding: '16px 20px',
           background: 'var(--bg-primary)',
@@ -146,13 +191,14 @@ const AdminTab = () => {
           <div>Premium</div>
           <div>Tasks</div>
           <div>Balance</div>
+          <div>Blocked</div>
           <div>Actions</div>
         </div>
         
         {users.map((user) => (
           <div key={user.id} style={{ 
             display: 'grid', 
-            gridTemplateColumns: '1fr 1fr 100px 100px 100px 120px', 
+            gridTemplateColumns: '1fr 1fr 72px 72px 72px 72px 160px', 
             gap: '16px',
             padding: '16px 20px',
             borderBottom: '1px solid var(--border-color)',
@@ -237,7 +283,34 @@ const AdminTab = () => {
                 </div>
                 <div>{user.taskCount || 0}</div>
                 <div>₹{user.walletBalance || 0}</div>
+                <div>
+                  <span style={{
+                    padding: '4px 8px',
+                    borderRadius: '12px',
+                    fontSize: '12px',
+                    background: isUserBlocked(user) ? 'rgba(239, 68, 68, 0.1)' : 'rgba(156, 163, 175, 0.1)',
+                    color: isUserBlocked(user) ? '#ef4444' : 'var(--text-secondary)',
+                  }}>
+                    {isUserBlocked(user) ? 'Yes' : 'No'}
+                  </span>
+                </div>
                 <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                  <button
+                    onClick={() => handleQuickBlockUpdate(user, !isUserBlocked(user))}
+                    disabled={saving}
+                    style={{
+                      padding: '6px 10px',
+                      background: isUserBlocked(user) ? 'rgba(0, 195, 126, 0.12)' : '#fee2e2',
+                      color: isUserBlocked(user) ? 'var(--accent-primary)' : '#ef4444',
+                      border: `1px solid ${isUserBlocked(user) ? 'rgba(0, 195, 126, 0.3)' : '#fecaca'}`,
+                      borderRadius: '6px',
+                      fontSize: '11px',
+                      cursor: saving ? 'not-allowed' : 'pointer',
+                      opacity: saving ? 0.7 : 1,
+                    }}
+                  >
+                    {isUserBlocked(user) ? 'Unblock' : 'Block'}
+                  </button>
                   <button
                     onClick={() => handleQuickPremiumUpdate(user, !user.isPremium)}
                     disabled={saving}

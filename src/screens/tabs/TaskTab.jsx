@@ -1,5 +1,7 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { DEFAULT_PRO_PRICING } from '../../firebase';
+
+const PDF_VERIFY_DURATION_MS = 10000;
 
 // ─── Task Data ────────────────────────────────────────────────────────────────
 const TEMPLATES = [
@@ -174,9 +176,16 @@ const UpgradeModal = ({ onClose, onUpgrade, onNavigateToPayment, proPriceAmount 
 
 // ─── Task Detail Modal ────────────────────────────────────────────────────────
 const TaskDetailModal = ({ task, onClose, onTaskComplete }) => {
-  const [phase,      setPhase]      = useState('info'); // info|downloaded|uploading|done
+  const [phase, setPhase] = useState('info'); // info|downloaded|verifying|done
   const [uploadedFile, setUploadedFile] = useState(null);
-  const [fileError,    setFileError]    = useState('');
+  const [fileError, setFileError] = useState('');
+  const [verifyProgress, setVerifyProgress] = useState(0);
+  const [verifySecondsLeft, setVerifySecondsLeft] = useState(10);
+  const verifyTimerRef = useRef(null);
+
+  useEffect(() => () => {
+    if (verifyTimerRef.current) clearInterval(verifyTimerRef.current);
+  }, []);
 
   // Persist completed task to localStorage
   const saveCompletion = () => {
@@ -228,16 +237,36 @@ const TaskDetailModal = ({ task, onClose, onTaskComplete }) => {
     setUploadedFile(file);
   };
 
-  // Submit with real file
+  const finishVerification = () => {
+    if (verifyTimerRef.current) {
+      clearInterval(verifyTimerRef.current);
+      verifyTimerRef.current = null;
+    }
+    setVerifyProgress(100);
+    setVerifySecondsLeft(0);
+    saveCompletion();
+    if (onTaskComplete) onTaskComplete(task.reward);
+    setPhase('done');
+  };
+
+  // Submit PDF — 10s verification before task is accepted
   const handleSubmit = () => {
     if (!uploadedFile) { setFileError('❌ Please select your edited PDF first.'); return; }
-    setPhase('uploading');
-    // Simulate upload (replace with real API call here)
-    setTimeout(() => {
-      saveCompletion();
-      if (onTaskComplete) onTaskComplete(task.reward);
-      setPhase('done');
-    }, 2200);
+
+    setPhase('verifying');
+    setVerifyProgress(0);
+    setVerifySecondsLeft(Math.ceil(PDF_VERIFY_DURATION_MS / 1000));
+
+    const startedAt = Date.now();
+    verifyTimerRef.current = setInterval(() => {
+      const elapsed = Date.now() - startedAt;
+      const progress = Math.min(100, Math.round((elapsed / PDF_VERIFY_DURATION_MS) * 100));
+      const secondsLeft = Math.max(0, Math.ceil((PDF_VERIFY_DURATION_MS - elapsed) / 1000));
+      setVerifyProgress(progress);
+      setVerifySecondsLeft(secondsLeft);
+    }, 100);
+
+    setTimeout(finishVerification, PDF_VERIFY_DURATION_MS);
   };
 
   return (
@@ -288,7 +317,7 @@ const TaskDetailModal = ({ task, onClose, onTaskComplete }) => {
           <div style={{ marginBottom: 18 }}>
             <h4 style={{ fontSize: 13, fontWeight: 700, marginBottom: 12, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Steps to Complete</h4>
             {task.steps.map((step, i) => {
-              const isDone = (phase === 'downloaded' && i === 0) || (phase === 'uploading' && i <= 1) || (uploadedFile && i <= 2);
+              const isDone = (phase === 'downloaded' && i === 0) || (phase === 'verifying' && i <= 2) || (uploadedFile && i <= 2);
               return (
                 <div key={i} style={{ display: 'flex', gap: 12, alignItems: 'flex-start', marginBottom: 10 }}>
                   <div style={{ width: 24, height: 24, borderRadius: '50%', background: isDone ? 'var(--green)' : (i === 0 ? task.accentColor+'22' : '#f0f2f8'), color: isDone ? 'white' : (i === 0 ? task.accentColor : 'var(--text-muted)'), fontSize: 10, fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, transition: 'all 0.3s', boxShadow: isDone ? 'var(--green-glow)' : 'none' }}>
@@ -309,7 +338,7 @@ const TaskDetailModal = ({ task, onClose, onTaskComplete }) => {
         )}
 
         {/* ── PHASE: downloaded — Upload section ── */}
-        {(phase === 'downloaded' || phase === 'uploading') && (
+        {(phase === 'downloaded' || phase === 'verifying') && (
           <div>
             {phase === 'downloaded' && (
               <div style={{ background: 'linear-gradient(135deg,#fffbeb,#fef3c7)', border: '1px solid #fcd34d', borderRadius: 14, padding: '12px 14px', marginBottom: 14, display: 'flex', gap: 10, alignItems: 'center' }}>
@@ -369,12 +398,26 @@ const TaskDetailModal = ({ task, onClose, onTaskComplete }) => {
               </div>
             )}
 
-            {/* Uploading spinner */}
-            {phase === 'uploading' && (
+            {/* Verifying spinner (10s) */}
+            {phase === 'verifying' && (
               <div style={{ textAlign: 'center', padding: '16px 0' }}>
                 <div style={{ width: 48, height: 48, border: '4px solid var(--green-light)', borderTopColor: 'var(--green)', borderRadius: '50%', animation: 'spin 0.9s linear infinite', margin: '0 auto 14px' }} />
-                <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 4 }}>Uploading your PDF…</div>
-                <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>Please wait while we verify your file</div>
+                <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 4 }}>Verifying your PDF…</div>
+                <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 14 }}>
+                  {verifySecondsLeft > 0
+                    ? `Please wait ~${verifySecondsLeft}s while we check your file`
+                    : 'Almost done…'}
+                </div>
+                <div style={{ height: 8, background: '#e5e7eb', borderRadius: 100, overflow: 'hidden', marginBottom: 8 }}>
+                  <div style={{
+                    height: '100%',
+                    width: `${verifyProgress}%`,
+                    background: 'var(--grad-green)',
+                    borderRadius: 100,
+                    transition: 'width 0.15s linear',
+                  }} />
+                </div>
+                <div style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 600 }}>{verifyProgress}% verified</div>
               </div>
             )}
           </div>

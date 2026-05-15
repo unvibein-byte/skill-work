@@ -3,15 +3,43 @@ import { useNavigate } from 'react-router-dom';
 import { FileText } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { getPostSplashPath } from '../utils/sessionRoute';
+import { checkUserAccountStatus, isFirebaseConfigured } from '../firebase';
+import { clearUserSession, setStoredBlockMessage } from '../utils/accountSession';
 
 const Splash = () => {
   const navigate = useNavigate();
 
   useEffect(() => {
-    const timer = setTimeout(() => {
-      navigate(getPostSplashPath(), { replace: true });
-    }, 2500);
-    return () => clearTimeout(timer);
+    let cancelled = false;
+
+    const goNext = async () => {
+      const next = getPostSplashPath();
+      const phone = localStorage.getItem('sw_phone');
+
+      if (phone?.trim() && isFirebaseConfigured && next !== '/login') {
+        try {
+          const status = await checkUserAccountStatus(phone);
+          if (!cancelled && !status.allowed) {
+            setStoredBlockMessage(status.message);
+            clearUserSession();
+            navigate('/blocked', { replace: true });
+            return;
+          }
+        } catch {
+          /* continue if check fails */
+        }
+      }
+
+      if (!cancelled) {
+        navigate(next, { replace: true });
+      }
+    };
+
+    const timer = setTimeout(goNext, 2500);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
   }, [navigate]);
 
   return (
