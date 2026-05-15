@@ -2,13 +2,14 @@ import { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { FileText } from 'lucide-react';
 import { motion } from 'framer-motion';
+import { getPostSplashPath } from '../utils/sessionRoute';
 
 const Splash = () => {
   const navigate = useNavigate();
 
   useEffect(() => {
     const timer = setTimeout(() => {
-      navigate('/login');
+      navigate(getPostSplashPath(), { replace: true });
     }, 2500);
     return () => clearTimeout(timer);
   }, [navigate]);

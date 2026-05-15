@@ -1,13 +1,42 @@
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Send, ArrowRight } from 'lucide-react';
 import { motion } from 'framer-motion';
+import { getTelegramConfig, DEFAULT_TELEGRAM_CONFIG } from '../firebase';
 
 const OnboardingTelegram = () => {
     const navigate = useNavigate();
+    const [tg, setTg] = useState(() => ({ ...DEFAULT_TELEGRAM_CONFIG }));
+    const [loading, setLoading] = useState(true);
+
+    useEffect(() => {
+        let cancelled = false;
+        getTelegramConfig().then((cfg) => {
+            if (!cancelled) setTg(cfg);
+        }).finally(() => {
+            if (!cancelled) setLoading(false);
+        });
+        return () => { cancelled = true; };
+    }, []);
+
+    useEffect(() => {
+        if (
+            localStorage.getItem('sw_onboarding_complete') === 'true' &&
+            localStorage.getItem('sw_name')?.trim() &&
+            localStorage.getItem('sw_phone')?.trim()
+        ) {
+            navigate('/main', { replace: true });
+        }
+    }, [navigate]);
 
     const handleJoin = () => {
-        // Open Telegram link in a new tab
-        // window.open('https://t.me/your_channel', '_blank');
+        const url = tg.channelUrl || DEFAULT_TELEGRAM_CONFIG.channelUrl;
+        try {
+            window.open(url, '_blank', 'noopener,noreferrer');
+        } catch {
+            window.location.href = url;
+        }
+        localStorage.setItem('sw_onboarding_complete', 'true');
         navigate('/main');
     };
 
@@ -16,7 +45,6 @@ const OnboardingTelegram = () => {
             initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
             style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column', overflow: 'hidden', background: '#f0f2f8' }}
         >
-            {/* ── HEADER ── */}
             <div style={{
                 background: 'linear-gradient(160deg,#0f1220 0%,#1a2040 60%,#2d1b69 100%)',
                 padding: '44px 24px 64px', position: 'relative', overflow: 'hidden',
@@ -41,7 +69,6 @@ const OnboardingTelegram = () => {
                 </motion.div>
             </div>
 
-            {/* ── CONTENT CARD ── */}
             <motion.div
                 initial={{ y: 30, opacity: 0 }} animate={{ y: 0, opacity: 1 }}
                 transition={{ duration: 0.5, delay: 0.2 }}
@@ -57,20 +84,21 @@ const OnboardingTelegram = () => {
             >
                 <div style={{ display: 'flex', flexDirection: 'column', flex: 1 }}>
                     <p style={{ color: '#4a5568', fontSize: '15px', lineHeight: '1.6', margin: '0 0 24px 0', fontWeight: 500 }}>
-                        Don't miss out! Join our official Telegram channel to see thousands of <span style={{ color: '#3b82f6', fontWeight: 700 }}>Withdrawal Proofs</span> and get a{' '}
+                        Don&apos;t miss out! Join our official Telegram channel to see thousands of <span style={{ color: '#3b82f6', fontWeight: 700 }}>Withdrawal Proofs</span> and get a{' '}
                         <span style={{ background: '#e6f8f0', color: '#00c37e', padding: '2px 8px', borderRadius: '8px', fontWeight: 800, whiteSpace: 'nowrap' }}>
-                            ₹10 Bonus
-                        </span> !
+                            {tg.bonusLabel}
+                        </span>
+                        {' '}!
                     </p>
 
-                    {/* TELEGRAM CHANNEL CARD */}
                     <motion.div
                         initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} transition={{ delay: 0.4 }}
                         style={{
                             width: '100%', background: '#f0f5ff', border: '1px solid #cce0ff',
                             borderRadius: '16px', padding: '16px',
                             display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                            marginBottom: 'auto'
+                            marginBottom: 'auto',
+                            opacity: loading ? 0.85 : 1,
                         }}
                     >
                         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
@@ -83,10 +111,10 @@ const OnboardingTelegram = () => {
                             </div>
                             <div style={{ textAlign: 'left' }}>
                                 <div style={{ color: '#0f1220', fontSize: '15px', fontWeight: 800, marginBottom: '2px', fontFamily: "'Outfit',sans-serif" }}>
-                                    FD Premier Official
+                                    {loading ? '…' : tg.channelName}
                                 </div>
                                 <div style={{ color: '#3b82f6', fontSize: '13px', fontWeight: 600 }}>
-                                    Join 15,000+ Members
+                                    {loading ? 'Loading…' : tg.memberSubtitle}
                                 </div>
                             </div>
                         </div>
@@ -95,7 +123,7 @@ const OnboardingTelegram = () => {
                             background: 'linear-gradient(135deg,#00c37e,#00e896)', color: 'white', fontSize: '14px',
                             fontWeight: 800, padding: '6px 14px', borderRadius: '24px', boxShadow: '0 4px 10px rgba(0,195,126,0.3)'
                         }}>
-                            +₹10
+                            {tg.bonusLabel}
                         </div>
                     </motion.div>
                 </div>
@@ -105,6 +133,8 @@ const OnboardingTelegram = () => {
                         initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.6 }}
                         whileHover={{ y: -2 }}
                         whileTap={{ scale: 0.98 }}
+                        type="button"
+                        disabled={loading}
                         onClick={handleJoin}
                         style={{
                             width: '100%',
@@ -116,13 +146,14 @@ const OnboardingTelegram = () => {
                             fontSize: '16px',
                             fontWeight: 800,
                             fontFamily: "'Outfit', sans-serif",
-                            cursor: 'pointer',
+                            cursor: loading ? 'wait' : 'pointer',
                             display: 'flex',
                             alignItems: 'center',
                             justifyContent: 'center',
                             gap: '8px',
                             boxShadow: '0 6px 24px rgba(59, 130, 246, 0.4)',
-                            transition: 'all 0.2s'
+                            transition: 'all 0.2s',
+                            opacity: loading ? 0.75 : 1,
                         }}
                     >
                         Join & See Proofs <ArrowRight size={20} />

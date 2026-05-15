@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { DEFAULT_PRO_PRICING } from '../../firebase';
 
 // ─── Task Data ────────────────────────────────────────────────────────────────
 const TEMPLATES = [
@@ -119,7 +120,7 @@ const CATEGORY_COLORS = {
 };
 
 // ─── Upgrade Modal ────────────────────────────────────────────────────────────
-const UpgradeModal = ({ onClose, onUpgrade, onNavigateToPayment }) => {
+const UpgradeModal = ({ onClose, onUpgrade, onNavigateToPayment, proPriceAmount }) => {
   const handleUpgradeClick = async () => {
     const success = await onUpgrade();
     if (!success) {
@@ -160,7 +161,7 @@ const UpgradeModal = ({ onClose, onUpgrade, onNavigateToPayment }) => {
           </div>
 
           <button onClick={handleUpgradeClick} className="btn-purple" style={{ marginBottom: 10 }}>
-            👑 Upgrade Now — ₹399 Lifetime
+            👑 Upgrade Now — ₹{proPriceAmount} Lifetime
           </button>
           <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', fontSize: 14, cursor: 'pointer', fontFamily: 'var(--font-sans)', width: '100%', padding: '8px' }}>
             Maybe Later
@@ -462,7 +463,7 @@ const TaskCard = ({ task, locked, claimed, onPress }) => (
 );
 
 // ─── Main Task Tab ────────────────────────────────────────────────────────────
-const TaskTab = ({ userName, isPro, onUpgrade, onTaskComplete }) => {
+const TaskTab = ({ userName, isPro, onUpgrade, onTaskComplete, onNavigateToPayment, proPriceAmount = DEFAULT_PRO_PRICING.amount }) => {
   const [selectedTask, setSelectedTask] = useState(null);
   const [showUpgrade,  setShowUpgrade]  = useState(false);
   const [doneIds,      setDoneIds]      = useState(() => {
@@ -615,7 +616,7 @@ const TaskTab = ({ userName, isPro, onUpgrade, onTaskComplete }) => {
 
       {/* Modals */}
       {selectedTask && <TaskDetailModal task={selectedTask} onClose={() => setSelectedTask(null)} onTaskComplete={handleTaskDone} />}
-      {showUpgrade   && <UpgradeModal   onClose={() => setShowUpgrade(false)} onUpgrade={handleUpgrade} onNavigateToPayment={onNavigateToPayment} />}
+      {showUpgrade   && <UpgradeModal   onClose={() => setShowUpgrade(false)} onUpgrade={handleUpgrade} onNavigateToPayment={onNavigateToPayment} proPriceAmount={proPriceAmount} />}
     </div>
   );
 };

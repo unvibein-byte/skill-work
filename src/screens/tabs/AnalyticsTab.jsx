@@ -1,4 +1,5 @@
 import { useState, useMemo } from 'react';
+import { DEFAULT_PRO_PRICING } from '../../firebase';
 
 /* ─── helpers ────────────────────────────────────────────────────────────── */
 const toDate  = str => new Date(str);
@@ -142,7 +143,7 @@ const BarChart = ({ data, labelKey, valueKey, color, accentIdx = -1 }) => {
 };
 
 /* ─── Main Component ─────────────────────────────────────────────────────── */
-const AnalyticsTab = ({ isPro }) => {
+const AnalyticsTab = ({ isPro, proPriceAmount = DEFAULT_PRO_PRICING.amount }) => {
   const [period, setPeriod] = useState('week');
   const { all, weekly, monthly, categories, heatmap, streak, totalEarned, totalTasks, todayTasks, todayEarn, avgPerTask, bestDay } = useStats();
 
@@ -332,7 +333,7 @@ const AnalyticsTab = ({ isPro }) => {
               Pro users earn 3× more and see deeper task-by-task insights.
             </div>
             <div style={{ display:'inline-flex', alignItems:'center', gap:6, background:'rgba(127,86,217,0.2)', border:'1px solid rgba(127,86,217,0.3)', borderRadius:100, padding:'5px 14px' }}>
-              <span style={{ fontSize:11, color:'#a78bfa', fontWeight:700 }}>👑 Pro — ₹399 Lifetime</span>
+              <span style={{ fontSize:11, color:'#a78bfa', fontWeight:700 }}>👑 Pro — ₹{proPriceAmount} Lifetime</span>
             </div>
           </div>
         )}

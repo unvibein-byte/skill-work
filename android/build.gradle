@@ -24,6 +24,20 @@ allprojects {
     }
 }
 
+// Capacitor 8 defaults to Java 21; many machines only have JDK 17 (Android Studio default).
+// Align all Android modules to 17 so `gradlew assembleDebug` works without installing JDK 21.
+subprojects { subproject ->
+    subproject.afterEvaluate {
+        if (subproject.plugins.hasPlugin('com.android.application') ||
+            subproject.plugins.hasPlugin('com.android.library')) {
+            subproject.android.compileOptions {
+                sourceCompatibility JavaVersion.VERSION_17
+                targetCompatibility JavaVersion.VERSION_17
+            }
+        }
+    }
+}
+
 task clean(type: Delete) {
     delete rootProject.buildDir
 }

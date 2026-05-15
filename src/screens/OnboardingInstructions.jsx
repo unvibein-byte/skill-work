@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowRight, Download, Edit3, Upload, CheckCircle } from 'lucide-react';
 import { motion } from 'framer-motion';
@@ -11,6 +12,16 @@ const steps = [
 
 const OnboardingInstructions = () => {
   const navigate = useNavigate();
+
+  useEffect(() => {
+    if (
+      localStorage.getItem('sw_onboarding_complete') === 'true' &&
+      localStorage.getItem('sw_name')?.trim() &&
+      localStorage.getItem('sw_phone')?.trim()
+    ) {
+      navigate('/main', { replace: true });
+    }
+  }, [navigate]);
 
   return (
     <motion.div

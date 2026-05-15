@@ -1,13 +1,19 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { signInAnonymouslyUser, saveUserProfile, isFirebaseConfigured } from '../firebase';
+import { ensureAnonymousUser, saveUserProfile, isFirebaseConfigured } from '../firebase';
+import { getPostSplashPath } from '../utils/sessionRoute';
 
 const Login = () => {
   const navigate = useNavigate();
-  const [name, setName] = useState('');
-  const [phone, setPhone] = useState('');
+  const [name, setName] = useState(() => localStorage.getItem('sw_name') || '');
+  const [phone, setPhone] = useState(() => localStorage.getItem('sw_phone') || '');
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    const next = getPostSplashPath();
+    if (next !== '/login') navigate(next, { replace: true });
+  }, [navigate]);
 
   const handleLogin = async (e) => {
     e.preventDefault();
@@ -15,10 +21,11 @@ const Login = () => {
 
     setLoading(true);
 
+    const alreadyFinishedOnboarding = localStorage.getItem('sw_onboarding_complete') === 'true';
+
     if (isFirebaseConfigured) {
       try {
-        // Sign in anonymously (must be enabled in Firebase Authentication settings)
-        const { user } = await signInAnonymouslyUser();
+        const user = await ensureAnonymousUser();
         if (user?.uid) {
           await saveUserProfile(user.uid, { name, phone });
           localStorage.setItem('sw_userId', user.uid);
@@ -29,11 +36,20 @@ const Login = () => {
       }
     }
 
-    // Keep local state for offline/demo usage
     localStorage.setItem('sw_name', name);
     localStorage.setItem('sw_phone', phone);
+    // Only new users need the onboarding flow; do not reset returning users
+    if (!alreadyFinishedOnboarding) {
+      localStorage.setItem('sw_onboarding_complete', 'false');
+    }
 
-    setTimeout(() => navigate('/onboarding-1'), 1000);
+    setTimeout(() => {
+      if (alreadyFinishedOnboarding) {
+        navigate('/main', { replace: true });
+      } else {
+        navigate('/onboarding-1');
+      }
+    }, 600);
   };
 
   return (

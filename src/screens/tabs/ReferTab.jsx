@@ -133,9 +133,9 @@ const ReferTab = ({ userName }) => {
   const [showInvite,    setShowInvite]    = useState(false);
   const [inviteParent,  setInviteParent]  = useState({ id: 'root', name: '' });
   const [copied,        setCopied]        = useState(false);
-  const [toast,         setToast]         = useState('');
-
-  const showToast = (msg) => { setToast(msg); setTimeout(() => setToast(''), 2200); };
+  const showToast = (msg) => {
+    if (import.meta.env.DEV) console.debug('[toast]', msg);
+  };
 
   const handleCopy = () => {
     navigator.clipboard?.writeText(`Join SkillWork using my code ${myCode} and start earning ₹5,000/day!\nhttps://skillwork.app/join?ref=${myCode}`).catch(()=>{});
@@ -183,13 +183,6 @@ const ReferTab = ({ userName }) => {
 
   return (
     <div>
-
-      {/* ── TOAST ── */}
-      {toast && (
-        <div style={{ position:'fixed', top:20, left:'50%', transform:'translateX(-50%)', background:'#1a2040', color:'white', padding:'10px 20px', borderRadius:100, fontSize:13, fontWeight:600, zIndex:999, boxShadow:'0 8px 24px rgba(0,0,0,0.3)', whiteSpace:'nowrap' }}>
-          {toast}
-        </div>
-      )}
 
       {/* ── HERO ── */}
       <div style={{ background:'linear-gradient(160deg,#0f1220 0%,#1a2040 55%,#0d3320 100%)', padding:'28px 20px 52px', position:'relative', overflow:'hidden' }}>

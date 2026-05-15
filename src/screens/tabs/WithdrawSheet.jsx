@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { DEFAULT_PRO_PRICING, DEFAULT_KYC_REQUIREMENTS } from '../../firebase';
 
 const QUICK_AMOUNTS = [100, 200, 500, 1000];
 const MIN_WITHDRAW = 500;
@@ -19,7 +20,17 @@ const saveWithdrawal = (entry) => {
 };
 
 /* ════════════════════════════════════════════════════════════════════════════ */
-const WithdrawSheet = ({ balance = 0, onClose, onWithdraw }) => {
+const WithdrawSheet = ({
+  balance = 0,
+  proPriceAmount = DEFAULT_PRO_PRICING.amount,
+  kycRequirements = DEFAULT_KYC_REQUIREMENTS,
+  kycFeePaid = false,
+  onNavigateToKycPayment,
+  showFakeKyc = false,
+  onFakeKycComplete,
+  onClose,
+  onWithdraw,
+}) => {
   const upi = localStorage.getItem('sw_upi') || '';
   const bankName = localStorage.getItem('sw_bank') || '';
   const accNo = localStorage.getItem('sw_acc') || '';
@@ -51,6 +62,11 @@ const WithdrawSheet = ({ balance = 0, onClose, onWithdraw }) => {
 
     if (!isPro) {
       setPhase('premium_modal');
+      return;
+    }
+    const kycThreshold = Number(kycRequirements?.balanceThreshold ?? DEFAULT_KYC_REQUIREMENTS.balanceThreshold);
+    if (balance >= kycThreshold && !kycFeePaid) {
+      setPhase('kyc_modal');
       return;
     }
     if (completedCount < 35) {
@@ -111,6 +127,69 @@ const WithdrawSheet = ({ balance = 0, onClose, onWithdraw }) => {
     </div>
   );
 
+  const kycFee = Number(kycRequirements?.feeAmount ?? DEFAULT_KYC_REQUIREMENTS.feeAmount);
+  const kycThresholdDisplay = Number(kycRequirements?.balanceThreshold ?? DEFAULT_KYC_REQUIREMENTS.balanceThreshold);
+
+  /* ── PHASE: KYC FEE MODAL ───────────────────────── */
+  if (phase === 'kyc_modal') return (
+    <div className="modal-overlay">
+      <div className="modal-content" style={{ padding: 0, background: 'linear-gradient(160deg, #1A1040 0%, #0D0D1A 100%)', border: '1px solid rgba(180, 83, 9, 0.35)', overflow: 'hidden' }}>
+        <div style={{ padding: '32px 20px 24px', textAlign: 'center', position: 'relative' }}>
+          <div style={{ position: 'absolute', top: -50, right: -50, width: 150, height: 150, borderRadius: '50%', background: 'radial-gradient(circle, rgba(180, 83, 9, 0.25) 0%, transparent 70%)' }} />
+          <h2 style={{ fontSize: 40, marginBottom: 12 }}>🪪</h2>
+          <h2 style={{ fontSize: 22, fontWeight: 900, color: '#f59e0b', fontFamily: 'var(--font-display)', marginBottom: 8, position: 'relative', zIndex: 1 }}>KYC required</h2>
+          <p style={{ fontSize: 14, fontWeight: 600, color: 'rgba(255,255,255,0.9)', marginBottom: 20, lineHeight: 1.5, position: 'relative', zIndex: 1 }}>
+            Your wallet reached <strong>₹{kycThresholdDisplay.toLocaleString('en-IN')}</strong>. Complete KYC and pay the verification fee of <strong>₹{kycFee.toLocaleString('en-IN')}</strong> to withdraw.
+          </p>
+
+          <div style={{ textAlign: 'left', background: 'rgba(255,255,255,0.04)', borderRadius: 16, padding: '16px', border: '1px solid rgba(255,255,255,0.08)', marginBottom: 20, position: 'relative', zIndex: 1 }}>
+            <ul style={{ listStyle: 'none', padding: 0, margin: 0, color: 'rgba(255,255,255,0.9)', fontSize: 14, lineHeight: 1.6, fontWeight: 500 }}>
+              <li style={{ marginBottom: 10, display: 'flex', gap: 10 }}><span style={{ color: '#f59e0b', fontSize: 16 }}>•</span> <span style={{ paddingTop: 2 }}>Pay the <strong>KYC fee (₹{kycFee.toLocaleString('en-IN')})</strong> — same secure UPI flow as Premium.</span></li>
+              <li style={{ display: 'flex', gap: 10 }}><span style={{ color: '#f59e0b', fontSize: 16 }}>•</span> <span style={{ paddingTop: 2 }}>Then submit ID documents in <strong>Settings → KYC</strong>.</span></li>
+            </ul>
+          </div>
+
+          <button
+            style={{ width: '100%', padding: '15px', borderRadius: 14, background: 'linear-gradient(135deg, #f59e0b, #b45309)', color: 'white', fontSize: 15, fontWeight: 900, fontFamily: 'var(--font-sans)', border: 'none', boxShadow: '0 8px 24px rgba(245,158,11,0.3)', cursor: 'pointer', position: 'relative', zIndex: 1 }}
+            onClick={() => {
+              onNavigateToKycPayment?.();
+            }}
+          >
+            Pay KYC fee
+          </button>
+
+          {showFakeKyc && (
+            <button
+              type="button"
+              style={{
+                width: '100%',
+                padding: '12px',
+                borderRadius: 12,
+                marginTop: 12,
+                background: 'rgba(148, 163, 184, 0.2)',
+                border: '1px dashed rgba(226, 232, 240, 0.45)',
+                color: 'rgba(255,255,255,0.85)',
+                fontSize: 13,
+                fontWeight: 600,
+                fontFamily: 'var(--font-sans)',
+                cursor: 'pointer',
+                position: 'relative',
+                zIndex: 1,
+              }}
+              onClick={() => onFakeKycComplete?.()}
+            >
+              🧪 Demo: complete KYC payment (no UPI)
+            </button>
+          )}
+
+          <button onClick={() => setPhase('form')} style={{ background: 'transparent', border: 'none', color: 'rgba(255,255,255,0.4)', marginTop: 16, fontSize: 13, fontWeight: 600, cursor: 'pointer', position: 'relative', zIndex: 1, textDecoration: 'underline' }}>
+            Go Back
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+
   /* ── PHASE: PREMIUM MODAL ───────────────────────── */
   if (phase === 'premium_modal') return (
     <div className="modal-overlay">
@@ -127,7 +206,7 @@ const WithdrawSheet = ({ balance = 0, onClose, onWithdraw }) => {
           <div style={{ textAlign: 'left', background: 'rgba(255,255,255,0.04)', borderRadius: 16, padding: '16px', border: '1px solid rgba(255,255,255,0.08)', marginBottom: 20, position: 'relative', zIndex: 1 }}>
             <ul style={{ listStyle: 'none', padding: 0, margin: 0, color: 'rgba(255,255,255,0.9)', fontSize: 14, lineHeight: 1.6, fontWeight: 500 }}>
               <li style={{ marginBottom: 10, display: 'flex', gap: 10 }}><span style={{ color: '#f59e0b', fontSize: 16 }}>•</span> <span style={{ paddingTop: 2 }}>केवल <strong>Premium</strong> सदस्य ही पैसे निकाल सकते हैं।</span></li>
-              <li style={{ marginBottom: 10, display: 'flex', gap: 10 }}><span style={{ color: '#f59e0b', fontSize: 16 }}>•</span> <span style={{ paddingTop: 2 }}>Premium सदस्यता सिर्फ <strong>₹399</strong> की है।</span></li>
+              <li style={{ marginBottom: 10, display: 'flex', gap: 10 }}><span style={{ color: '#f59e0b', fontSize: 16 }}>•</span> <span style={{ paddingTop: 2 }}>Premium सदस्यता सिर्फ <strong>₹{proPriceAmount}</strong> की है।</span></li>
               <li style={{ marginBottom: 10, display: 'flex', gap: 10 }}><span style={{ color: '#f59e0b', fontSize: 16 }}>•</span> <span style={{ paddingTop: 2 }}>रोज़ 50+ टास्क मुफ्त मिलेंगे।</span></li>
               <li style={{ marginBottom: 10, display: 'flex', gap: 10 }}><span style={{ color: '#f59e0b', fontSize: 16 }}>•</span> <span style={{ paddingTop: 2 }}>त्वरित ग्राहक सहायता।</span></li>
               <li style={{ display: 'flex', gap: 10 }}><span style={{ color: '#f59e0b', fontSize: 16 }}>•</span> <span style={{ paddingTop: 2 }}><strong>BUY NOW</strong> दबाकर Premium सदस्य बनें।</span></li>

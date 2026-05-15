@@ -70,6 +70,25 @@ const AdminTab = () => {
     }
   };
 
+  const handleQuickPremiumUpdate = async (user, nextPremiumState) => {
+    setSaving(true);
+    setMessage('');
+    try {
+      await updateUserPremiumStatus(user.id, nextPremiumState);
+      setUsers(users.map((item) =>
+        item.id === user.id ? { ...item, isPremium: nextPremiumState } : item
+      ));
+      setMessage(nextPremiumState ? '✅ User upgraded to Premium' : '✅ User downgraded to Free');
+      setTimeout(() => setMessage(''), 3000);
+    } catch (error) {
+      console.error('Failed to update premium status', error);
+      setMessage('❌ Failed to change premium status');
+      setTimeout(() => setMessage(''), 3000);
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const handleCancel = () => {
     setEditingUser(null);
   };
@@ -218,16 +237,32 @@ const AdminTab = () => {
                 </div>
                 <div>{user.taskCount || 0}</div>
                 <div>₹{user.walletBalance || 0}</div>
-                <div>
+                <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                  <button
+                    onClick={() => handleQuickPremiumUpdate(user, !user.isPremium)}
+                    disabled={saving}
+                    style={{
+                      padding: '6px 10px',
+                      background: user.isPremium ? '#fee2e2' : 'rgba(0, 195, 126, 0.12)',
+                      color: user.isPremium ? '#ef4444' : 'var(--accent-primary)',
+                      border: `1px solid ${user.isPremium ? '#fecaca' : 'rgba(0, 195, 126, 0.3)'}`,
+                      borderRadius: '6px',
+                      fontSize: '11px',
+                      cursor: saving ? 'not-allowed' : 'pointer',
+                      opacity: saving ? 0.7 : 1
+                    }}
+                  >
+                    {user.isPremium ? 'Downgrade' : 'Upgrade'}
+                  </button>
                   <button 
                     onClick={() => handleEdit(user)}
                     style={{ 
-                      padding: '6px 12px', 
+                      padding: '6px 10px', 
                       background: 'var(--accent-primary)', 
                       color: 'white', 
                       border: 'none', 
                       borderRadius: '6px', 
-                      fontSize: '12px',
+                      fontSize: '11px',
                       cursor: 'pointer'
                     }}
                   >

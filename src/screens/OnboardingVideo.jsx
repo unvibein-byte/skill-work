@@ -1,9 +1,20 @@
+import { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Play, Video } from 'lucide-react';
 import { motion } from 'framer-motion';
 
 const OnboardingVideo = () => {
   const navigate = useNavigate();
+
+  useEffect(() => {
+    if (
+      localStorage.getItem('sw_onboarding_complete') === 'true' &&
+      localStorage.getItem('sw_name')?.trim() &&
+      localStorage.getItem('sw_phone')?.trim()
+    ) {
+      navigate('/main', { replace: true });
+    }
+  }, [navigate]);
 
   return (
     <motion.div

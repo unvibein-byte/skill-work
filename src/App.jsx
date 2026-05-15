@@ -1,6 +1,8 @@
+import { useEffect } from 'react';
 import { Routes, Route, useLocation, Navigate } from 'react-router-dom';
 import { AnimatePresence } from 'framer-motion';
 import { LangProvider } from './i18n/LangContext';
+import { onAuthStateChange, isFirebaseConfigured } from './firebase';
 
 import Splash from './screens/Splash';
 import Login from './screens/Login';
@@ -11,6 +13,20 @@ import OnboardingTelegram from './screens/OnboardingTelegram';
 
 function App() {
   const location = useLocation();
+
+  useEffect(() => {
+    if (!isFirebaseConfigured) return undefined;
+    const unsub = onAuthStateChange((user) => {
+      if (user?.uid) {
+        try {
+          localStorage.setItem('sw_userId', user.uid);
+        } catch {
+          /* ignore quota / private mode */
+        }
+      }
+    });
+    return () => unsub();
+  }, []);
 
   return (
     <LangProvider>

@@ -1,6 +1,12 @@
 import { initializeApp } from 'firebase/app';
 import { getAnalytics } from 'firebase/analytics';
-import { getAuth, signInAnonymously, onAuthStateChanged } from 'firebase/auth';
+import {
+  getAuth,
+  signInAnonymously,
+  onAuthStateChanged,
+  setPersistence,
+  browserLocalPersistence,
+} from 'firebase/auth';
 import { getFirestore, doc, setDoc, getDoc, collection, updateDoc, query, where, getDocs, deleteDoc } from 'firebase/firestore';
 
 const defaultFirebaseConfig = {
@@ -41,6 +47,10 @@ export const analytics =
 export const auth = isFirebaseConfigured ? getAuth(app) : null;
 export const db = isFirebaseConfigured ? getFirestore(app) : null;
 
+if (typeof window !== 'undefined' && auth) {
+  setPersistence(auth, browserLocalPersistence).catch(() => {});
+}
+
 /**
  * Sign in anonymously (useful for quick demos and storing user data without full auth).
  * Requires enabling "Anonymous" sign-in in your Firebase console.
@@ -51,6 +61,21 @@ export async function signInAnonymouslyUser() {
   }
 
   return signInAnonymously(auth);
+}
+
+/**
+ * Reuses the persisted anonymous user if one exists; otherwise signs in anonymously.
+ * Keeps the same UID across visits when browser storage is intact.
+ */
+export async function ensureAnonymousUser() {
+  if (!isFirebaseConfigured || !auth) {
+    return null;
+  }
+  if (auth.currentUser) {
+    return auth.currentUser;
+  }
+  const cred = await signInAnonymously(auth);
+  return cred.user;
 }
 
 /**
@@ -216,47 +241,217 @@ export async function updateUserProfile(phoneNumberOrUid, data) {
   }
 }
 
+/** Defaults for Pro upgrade (also written to Firestore on first read). */
+export const DEFAULT_PRO_PRICING = Object.freeze({
+  amount: 399,
+  currency: 'INR',
+  description: 'Lifetime Pro Access',
+});
+
+/** When wallet balance reaches this threshold, user must complete KYC fee payment (Firestore: `config/kyc_requirements`). */
+export const DEFAULT_KYC_REQUIREMENTS = Object.freeze({
+  balanceThreshold: 2000,
+  feeAmount: 300,
+  currency: 'INR',
+  description: 'KYC verification fee',
+});
+
+/** Onboarding Telegram channel — document `config/telegram` in Firestore. */
+export const DEFAULT_TELEGRAM_CONFIG = Object.freeze({
+  channelUrl: 'https://t.me/skillwork_official',
+  channelName: 'SkillWork Official',
+  memberSubtitle: 'Join our community for proofs & updates',
+  bonusLabel: '+₹10',
+});
+
+export function normalizeTelegramConfig(raw) {
+  const d = raw && typeof raw === 'object' ? raw : {};
+  const channelUrl =
+    typeof d.channelUrl === 'string' && d.channelUrl.trim().startsWith('http')
+      ? d.channelUrl.trim()
+      : DEFAULT_TELEGRAM_CONFIG.channelUrl;
+  const channelName =
+    typeof d.channelName === 'string' && d.channelName.trim()
+      ? d.channelName.trim()
+      : DEFAULT_TELEGRAM_CONFIG.channelName;
+  const memberSubtitle =
+    typeof d.memberSubtitle === 'string' && d.memberSubtitle.trim()
+      ? d.memberSubtitle.trim()
+      : DEFAULT_TELEGRAM_CONFIG.memberSubtitle;
+  const bonusLabel =
+    typeof d.bonusLabel === 'string' && d.bonusLabel.trim()
+      ? d.bonusLabel.trim()
+      : DEFAULT_TELEGRAM_CONFIG.bonusLabel;
+  return { channelUrl, channelName, memberSubtitle, bonusLabel };
+}
+
+export async function getTelegramConfig() {
+  if (!isFirebaseConfigured || !db) {
+    return normalizeTelegramConfig(null);
+  }
+  try {
+    const ref = doc(db, 'config', 'telegram');
+    const snap = await getDoc(ref);
+    if (snap.exists()) {
+      return normalizeTelegramConfig(snap.data());
+    }
+    const defaultData = {
+      ...DEFAULT_TELEGRAM_CONFIG,
+      createdAt: new Date().toISOString(),
+    };
+    await setDoc(ref, defaultData);
+    return normalizeTelegramConfig(defaultData);
+  } catch (error) {
+    console.error('Failed to get Telegram config', error);
+    return normalizeTelegramConfig(null);
+  }
+}
+
+const DEFAULT_UPI_MERCHANT = Object.freeze({ upiId: 'default@upi', name: 'Default Name' });
+
+/**
+ * Build the in-app pricing object from Firestore `config/pricing`.
+ * Only these fields are read: amount, currency, description (e.g. int64 amount, "INR", "Lifetime Pro Access").
+ * Other document fields (createdAt, etc.) are ignored and not returned.
+ */
+export function normalizeProPricing(raw) {
+  const d = raw && typeof raw === 'object' ? raw : {};
+  const n = Number(d.amount);
+  const amount = Number.isFinite(n) && n >= 0 ? n : DEFAULT_PRO_PRICING.amount;
+  const currency =
+    typeof d.currency === 'string' && d.currency.trim()
+      ? d.currency.trim()
+      : DEFAULT_PRO_PRICING.currency;
+  const description =
+    typeof d.description === 'string' && d.description.trim()
+      ? d.description.trim()
+      : DEFAULT_PRO_PRICING.description;
+  return { amount, currency, description };
+}
+
+/**
+ * Build KYC gate config from Firestore `config/kyc_requirements`.
+ * Fields: balanceThreshold, feeAmount, currency, description.
+ */
+export function normalizeKycRequirements(raw) {
+  const d = raw && typeof raw === 'object' ? raw : {};
+  const th = Number(d.balanceThreshold);
+  const fee = Number(d.feeAmount);
+  const balanceThreshold =
+    Number.isFinite(th) && th >= 0 ? th : DEFAULT_KYC_REQUIREMENTS.balanceThreshold;
+  const feeAmount = Number.isFinite(fee) && fee >= 0 ? fee : DEFAULT_KYC_REQUIREMENTS.feeAmount;
+  const currency =
+    typeof d.currency === 'string' && d.currency.trim()
+      ? d.currency.trim()
+      : DEFAULT_KYC_REQUIREMENTS.currency;
+  const description =
+    typeof d.description === 'string' && d.description.trim()
+      ? d.description.trim()
+      : DEFAULT_KYC_REQUIREMENTS.description;
+  return { balanceThreshold, feeAmount, currency, description };
+}
+
+export async function getKycRequirements() {
+  if (!isFirebaseConfigured || !db) {
+    return normalizeKycRequirements(null);
+  }
+
+  try {
+    const ref = doc(db, 'config', 'kyc_requirements');
+    const snap = await getDoc(ref);
+    if (snap.exists()) {
+      return normalizeKycRequirements(snap.data());
+    }
+    const defaultData = {
+      ...DEFAULT_KYC_REQUIREMENTS,
+      createdAt: new Date().toISOString(),
+    };
+    await setDoc(ref, defaultData);
+    return normalizeKycRequirements(defaultData);
+  } catch (error) {
+    console.error('Failed to get KYC requirements', error);
+    return normalizeKycRequirements(null);
+  }
+}
+
+/**
+ * From Firestore UPI docs (`payment/intent_upi`, `payment/upi`): only **upiId** and **name** are used.
+ * Fields like **createdAt** are ignored and not returned.
+ */
+function normalizeUpiMerchant(raw) {
+  const d = raw && typeof raw === 'object' ? raw : {};
+  const upiId =
+    typeof d.upiId === 'string' && d.upiId.trim() ? d.upiId.trim() : DEFAULT_UPI_MERCHANT.upiId;
+  const name =
+    typeof d.name === 'string' && d.name.trim() ? d.name.trim() : DEFAULT_UPI_MERCHANT.name;
+  return { upiId, name };
+}
+
+/** Legacy / generic merchant UPI (e.g. QR host). Intent flow uses {@link getIntentUpiDetails}. */
 export async function getUpiDetails() {
   if (!isFirebaseConfigured || !db) {
-    return { upiId: 'default@upi', name: 'Default Name' };
+    return normalizeUpiMerchant(null);
   }
 
   try {
     const ref = doc(db, 'payment', 'upi');
     const snap = await getDoc(ref);
     if (snap.exists()) {
-      return snap.data();
-    } else {
-      // Create default if not exists
-      const defaultData = { upiId: 'default@upi', name: 'Default Name' };
-      await setDoc(ref, defaultData);
-      return defaultData;
+      return normalizeUpiMerchant(snap.data());
     }
+    const defaultData = { ...DEFAULT_UPI_MERCHANT, createdAt: new Date().toISOString() };
+    await setDoc(ref, defaultData);
+    return normalizeUpiMerchant(defaultData);
   } catch (error) {
     console.error('Failed to get UPI details', error);
-    return { upiId: 'default@upi', name: 'Default Name' };
+    return normalizeUpiMerchant(null);
+  }
+}
+
+/**
+ * UPI for in-app **Intent** deep links only (QR/web flow unchanged).
+ * Document: **payment/intent_upi** — fields used: **upiId**, **name** (plus optional **createdAt** in DB, ignored by the app).
+ */
+export async function getIntentUpiDetails() {
+  if (!isFirebaseConfigured || !db) {
+    return normalizeUpiMerchant(null);
+  }
+
+  try {
+    const ref = doc(db, 'payment', 'intent_upi');
+    const snap = await getDoc(ref);
+    if (snap.exists()) {
+      return normalizeUpiMerchant(snap.data());
+    }
+    const defaultData = { ...DEFAULT_UPI_MERCHANT, createdAt: new Date().toISOString() };
+    await setDoc(ref, defaultData);
+    return normalizeUpiMerchant(defaultData);
+  } catch (error) {
+    console.error('Failed to get intent UPI details', error);
+    return normalizeUpiMerchant(null);
   }
 }
 
 export async function getProPricing() {
   if (!isFirebaseConfigured || !db) {
-    return { amount: 399, currency: 'INR', description: 'Lifetime Pro Access' };
+    return normalizeProPricing(null);
   }
 
   try {
     const ref = doc(db, 'config', 'pricing');
     const snap = await getDoc(ref);
     if (snap.exists()) {
-      return snap.data();
-    } else {
-      // Create default if not exists
-      const defaultData = { amount: 399, currency: 'INR', description: 'Lifetime Pro Access' };
-      await setDoc(ref, defaultData);
-      return defaultData;
+      return normalizeProPricing(snap.data());
     }
+    const defaultData = {
+      ...DEFAULT_PRO_PRICING,
+      createdAt: new Date().toISOString(),
+    };
+    await setDoc(ref, defaultData);
+    return normalizeProPricing(defaultData);
   } catch (error) {
     console.error('Failed to get pro pricing', error);
-    return { amount: 399, currency: 'INR', description: 'Lifetime Pro Access' };
+    return normalizeProPricing(null);
   }
 }
 
@@ -272,11 +467,20 @@ export async function initializeFirestoreData() {
     const upiSnap = await getDoc(upiRef);
     if (!upiSnap.exists()) {
       await setDoc(upiRef, {
-        upiId: 'default@upi',
-        name: 'Default Name',
+        ...DEFAULT_UPI_MERCHANT,
         createdAt: new Date().toISOString(),
       });
       console.debug('Created default UPI document');
+    }
+
+    const intentUpiRef = doc(db, 'payment', 'intent_upi');
+    const intentUpiSnap = await getDoc(intentUpiRef);
+    if (!intentUpiSnap.exists()) {
+      await setDoc(intentUpiRef, {
+        ...DEFAULT_UPI_MERCHANT,
+        createdAt: new Date().toISOString(),
+      });
+      console.debug('Created default intent UPI document');
     }
 
     // Initialize pricing
@@ -284,12 +488,30 @@ export async function initializeFirestoreData() {
     const pricingSnap = await getDoc(pricingRef);
     if (!pricingSnap.exists()) {
       await setDoc(pricingRef, {
-        amount: 399,
-        currency: 'INR',
-        description: 'Lifetime Pro Access',
+        ...DEFAULT_PRO_PRICING,
         createdAt: new Date().toISOString(),
       });
       console.debug('Created default pricing document');
+    }
+
+    const kycRef = doc(db, 'config', 'kyc_requirements');
+    const kycSnap = await getDoc(kycRef);
+    if (!kycSnap.exists()) {
+      await setDoc(kycRef, {
+        ...DEFAULT_KYC_REQUIREMENTS,
+        createdAt: new Date().toISOString(),
+      });
+      console.debug('Created default KYC requirements document');
+    }
+
+    const tgRef = doc(db, 'config', 'telegram');
+    const tgSnap = await getDoc(tgRef);
+    if (!tgSnap.exists()) {
+      await setDoc(tgRef, {
+        ...DEFAULT_TELEGRAM_CONFIG,
+        createdAt: new Date().toISOString(),
+      });
+      console.debug('Created default Telegram config document');
     }
 
     console.debug('Firestore data initialization complete');
@@ -298,26 +520,35 @@ export async function initializeFirestoreData() {
   }
 }
 
-export async function createPaymentRecord(uid, amount, method) {
+/** @typedef {'premium' | 'kyc'} PaymentPurpose */
+
+export async function createPaymentRecord(uid, amount, method, purpose = 'premium') {
   if (!isFirebaseConfigured || !db) {
     return null;
   }
 
   try {
-    // Check if user already has a completed payment (already Pro)
-    const hasCompleted = await hasCompletedPremiumPayment(uid);
-    if (hasCompleted) {
-      throw new Error('User already has a completed payment for premium upgrade');
+    if (purpose === 'premium') {
+      const hasCompleted = await hasCompletedPremiumPayment(uid);
+      if (hasCompleted) {
+        throw new Error('User already has a completed payment for premium upgrade');
+      }
+    } else if (purpose === 'kyc') {
+      const paid = await isUserKycFeePaid(uid);
+      if (paid) {
+        throw new Error('User already completed KYC fee payment');
+      }
     }
 
-    // Check if user already has a pending payment
-    const existingPending = await hasPendingPayment(uid);
+    const existingPending = await hasPendingPayment(uid, purpose);
     if (existingPending) {
-      console.debug('User already has pending payment, returning existing', { id: existingPending.id });
+      console.debug('User already has pending payment, returning existing', {
+        id: existingPending.id,
+        purpose,
+      });
       return existingPending;
     }
 
-    // Create new payment record only if no pending payment exists
     const paymentRef = doc(collection(db, 'payments'));
     const paymentData = {
       userId: uid,
@@ -325,12 +556,13 @@ export async function createPaymentRecord(uid, amount, method) {
       currency: 'INR',
       method: method, // 'intent' or 'qr'
       status: 'pending', // 'pending', 'completed', 'failed'
+      purpose,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
 
     await setDoc(paymentRef, paymentData);
-    console.debug('Created payment record', { id: paymentRef.id });
+    console.debug('Created payment record', { id: paymentRef.id, purpose });
     return { id: paymentRef.id, ...paymentData };
   } catch (error) {
     console.error('Failed to create payment record', error);
@@ -418,6 +650,69 @@ export async function createSuccessfulPayment(uid, amount, method, paymentId = n
     console.error('Failed to create successful payment record', error);
     throw error;
   }
+}
+
+/**
+ * Completed KYC fee payments — same date layout as {@link createSuccessfulPayment}.
+ * Structure: kyc_payments/{date}/transactions/{transactionId}
+ */
+export async function createSuccessfulKycPayment(uid, amount, method, paymentId = null) {
+  if (!isFirebaseConfigured || !db) {
+    return null;
+  }
+
+  try {
+    const now = new Date();
+    const dateStr = now.toISOString().split('T')[0];
+
+    const generateUUID = () => {
+      return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
+        const r = (Math.random() * 16) | 0;
+        const v = c === 'x' ? r : (r & 0x3) | 0x8;
+        return v.toString(16);
+      });
+    };
+
+    const transactionId = paymentId || generateUUID();
+    const transactionRef = doc(db, 'kyc_payments', dateStr, 'transactions', transactionId);
+
+    const paymentData = {
+      userId: uid,
+      amount: amount,
+      currency: 'INR',
+      method: method,
+      status: 'completed',
+      date: dateStr,
+      transactionId: transactionId,
+      createdAt: now.toISOString(),
+      completedAt: now.toISOString(),
+      updatedAt: now.toISOString(),
+    };
+
+    await setDoc(transactionRef, paymentData);
+    console.debug('Created successful KYC payment record', { date: dateStr, transactionId });
+    return { id: transactionId, ...paymentData };
+  } catch (error) {
+    console.error('Failed to create successful KYC payment record', error);
+    throw error;
+  }
+}
+
+/**
+ * Marks KYC fee as paid without a real UPI flow (dev/demo). Writes `kyc_payments` + `users.kycFeePaid`.
+ * Enable UI with `import.meta.env.DEV` or `VITE_ENABLE_FAKE_KYC=true`.
+ */
+export async function completeFakeKycPayment(uid) {
+  if (!isFirebaseConfigured || !db) {
+    throw new Error('Firebase is not configured');
+  }
+  if (await isUserKycFeePaid(uid)) {
+    return { ok: true, already: true };
+  }
+  const pricing = await getKycRequirements();
+  await createSuccessfulKycPayment(uid, pricing.feeAmount, 'demo');
+  await updateUserKycFeePaid(uid, true);
+  return { ok: true };
 }
 
 /**
@@ -638,9 +933,9 @@ export async function hasCompletedPremiumPayment(uid) {
 }
 
 /**
- * Check if user has a pending payment
+ * Check if user has a pending payment (`purpose` defaults to `premium`; legacy docs without `purpose` count as premium).
  */
-export async function hasPendingPayment(uid) {
+export async function hasPendingPayment(uid, purpose = 'premium') {
   if (!isFirebaseConfigured || !db) {
     return null;
   }
@@ -653,15 +948,69 @@ export async function hasPendingPayment(uid) {
       where('status', '==', 'pending')
     );
     const querySnapshot = await getDocs(q);
-    if (!querySnapshot.empty) {
-      // Return the first pending payment
-      const doc = querySnapshot.docs[0];
-      return { id: doc.id, ...doc.data() };
+    for (const d of querySnapshot.docs) {
+      const data = d.data();
+      const p = data.purpose || 'premium';
+      if (p === purpose) {
+        return { id: d.id, ...data };
+      }
     }
     return null;
   } catch (error) {
     console.error('Failed to check pending payment', error);
     return null;
+  }
+}
+
+/**
+ * Whether the user has a completed KYC fee in `kyc_payments` (any date).
+ */
+export async function hasCompletedKycPayment(uid) {
+  if (!isFirebaseConfigured || !db) {
+    return false;
+  }
+
+  try {
+    const kycPaymentsRef = collection(db, 'kyc_payments');
+    const dateDocs = await getDocs(kycPaymentsRef);
+
+    for (const dateDoc of dateDocs.docs) {
+      const dateStr = dateDoc.id;
+      const transactionsRef = collection(db, 'kyc_payments', dateStr, 'transactions');
+      const transactionsSnapshot = await getDocs(transactionsRef);
+
+      for (const transactionDoc of transactionsSnapshot.docs) {
+        const data = transactionDoc.data();
+        if (data.userId === uid && data.status === 'completed') {
+          return true;
+        }
+      }
+    }
+
+    return false;
+  } catch (error) {
+    console.error('Failed to check KYC payment', error);
+    return false;
+  }
+}
+
+/**
+ * KYC fee satisfied if profile flag is true or a completed `kyc_payments` row exists.
+ */
+export async function isUserKycFeePaid(uid) {
+  if (!isFirebaseConfigured || !db) {
+    return false;
+  }
+
+  try {
+    const userProfile = await getUserProfile(uid);
+    if (userProfile && userProfile.kycFeePaid === true) {
+      return true;
+    }
+    return await hasCompletedKycPayment(uid);
+  } catch (error) {
+    console.error('Failed to check KYC fee status', error);
+    return false;
   }
 }
 
@@ -672,22 +1021,57 @@ export function onAuthStateChange(callback) {
   return onAuthStateChanged(auth, callback);
 }
 
+async function getUserDocRefByIdentifier(identifier) {
+  const rawIdentifier = String(identifier ?? '').trim();
+  if (!rawIdentifier) {
+    throw new Error('User identifier is required');
+  }
+
+  // 1) Exact document ID match (works for both phone-based IDs and legacy UID-based IDs).
+  const directRef = doc(db, 'users', rawIdentifier);
+  const directSnap = await getDoc(directRef);
+  if (directSnap.exists()) {
+    return directRef;
+  }
+
+  // 2) Normalized phone document ID.
+  const normalizedPhone = rawIdentifier.replace(/\D/g, '');
+  if (normalizedPhone && normalizedPhone !== rawIdentifier) {
+    const phoneRef = doc(db, 'users', normalizedPhone);
+    const phoneSnap = await getDoc(phoneRef);
+    if (phoneSnap.exists()) {
+      return phoneRef;
+    }
+  }
+
+  // 3) Lookup by uid field.
+  const usersRef = collection(db, 'users');
+  const uidQuery = query(usersRef, where('uid', '==', rawIdentifier));
+  const uidSnapshot = await getDocs(uidQuery);
+  if (!uidSnapshot.empty) {
+    return doc(db, 'users', uidSnapshot.docs[0].id);
+  }
+
+  // Fallback: create/update normalized phone doc when possible, otherwise raw identifier.
+  const fallbackId = normalizedPhone || rawIdentifier;
+  return doc(db, 'users', fallbackId);
+}
+
 /**
  * Update user premium status manually (admin function)
  */
-export async function updateUserPremiumStatus(phoneNumber, isPremium) {
+export async function updateUserPremiumStatus(identifier, isPremium) {
   if (!isFirebaseConfigured || !db) {
     return null;
   }
 
   try {
-    const normalizedPhone = phoneNumber.replace(/\D/g, '');
-    const ref = doc(db, 'users', normalizedPhone);
+    const ref = await getUserDocRefByIdentifier(identifier);
     
-    await updateDoc(ref, { 
+    await setDoc(ref, { 
       isPremium: isPremium,
       updatedAt: new Date().toISOString() 
-    });
+    }, { merge: true });
     return true;
   } catch (error) {
     console.error('Failed to update user premium status', error);
@@ -695,22 +1079,43 @@ export async function updateUserPremiumStatus(phoneNumber, isPremium) {
   }
 }
 
-/**
- * Update user task count
- */
-export async function updateUserTaskCount(phoneNumber, taskCount) {
+export async function updateUserKycFeePaid(identifier, kycFeePaid) {
   if (!isFirebaseConfigured || !db) {
     return null;
   }
 
   try {
-    const normalizedPhone = phoneNumber.replace(/\D/g, '');
-    const ref = doc(db, 'users', normalizedPhone);
+    const ref = await getUserDocRefByIdentifier(identifier);
+    await setDoc(
+      ref,
+      {
+        kycFeePaid: kycFeePaid,
+        updatedAt: new Date().toISOString(),
+      },
+      { merge: true }
+    );
+    return true;
+  } catch (error) {
+    console.error('Failed to update KYC fee status', error);
+    return false;
+  }
+}
+
+/**
+ * Update user task count
+ */
+export async function updateUserTaskCount(identifier, taskCount) {
+  if (!isFirebaseConfigured || !db) {
+    return null;
+  }
+
+  try {
+    const ref = await getUserDocRefByIdentifier(identifier);
     
-    await updateDoc(ref, { 
+    await setDoc(ref, { 
       taskCount: taskCount,
       updatedAt: new Date().toISOString() 
-    });
+    }, { merge: true });
     return true;
   } catch (error) {
     console.error('Failed to update user task count', error);
@@ -721,19 +1126,18 @@ export async function updateUserTaskCount(phoneNumber, taskCount) {
 /**
  * Update user wallet balance
  */
-export async function updateUserWalletBalance(phoneNumber, walletBalance) {
+export async function updateUserWalletBalance(identifier, walletBalance) {
   if (!isFirebaseConfigured || !db) {
     return null;
   }
 
   try {
-    const normalizedPhone = phoneNumber.replace(/\D/g, '');
-    const ref = doc(db, 'users', normalizedPhone);
+    const ref = await getUserDocRefByIdentifier(identifier);
     
-    await updateDoc(ref, { 
+    await setDoc(ref, { 
       walletBalance: walletBalance,
       updatedAt: new Date().toISOString() 
-    });
+    }, { merge: true });
     return true;
   } catch (error) {
     console.error('Failed to update user wallet balance', error);

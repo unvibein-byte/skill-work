@@ -8,11 +8,12 @@ import BillingsTab from './tabs/BillingsTab';
 import AnalyticsTab from './tabs/AnalyticsTab';
 import WithdrawSheet from './tabs/WithdrawSheet';
 import AchievementsTab from './tabs/AchievementsTab';
-import AdminTab from './tabs/AdminTab';
 import { useLang } from '../i18n/LangContext';
-import LiveNotification from '../components/LiveNotification';
-import { getUserProfile, isUserPremium, updateUserTaskCount, updateUserWalletBalance, isFirebaseConfigured, db } from '../firebase';
+import { getUserProfile, isUserPremium, updateUserTaskCount, updateUserWalletBalance, isFirebaseConfigured, db, getProPricing, DEFAULT_PRO_PRICING, getKycRequirements, DEFAULT_KYC_REQUIREMENTS, isUserKycFeePaid, completeFakeKycPayment } from '../firebase';
 import { doc, onSnapshot } from 'firebase/firestore';
+
+const SHOW_FAKE_KYC =
+  import.meta.env.DEV || import.meta.env.VITE_ENABLE_FAKE_KYC === 'true';
 
 /* ─── Language Toggle Button ─────────────────────────────────────────────── */
 const LangToggle = () => {
@@ -59,6 +60,32 @@ const MainInner = () => {
     catch { return 0; }
   });
 
+  const [proPricing, setProPricing] = useState(() => ({ ...DEFAULT_PRO_PRICING }));
+  const [kycRequirements, setKycRequirements] = useState(() => ({ ...DEFAULT_KYC_REQUIREMENTS }));
+  const [kycFeePaid, setKycFeePaid] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    getProPricing().then((p) => {
+      if (!cancelled) setProPricing(p);
+    });
+    getKycRequirements().then((k) => {
+      if (!cancelled) setKycRequirements(k);
+    });
+    return () => { cancelled = true; };
+  }, []);
+
+  const proPriceAmount = proPricing.amount;
+
+  useEffect(() => {
+    if (!userId) return;
+    let cancelled = false;
+    isUserKycFeePaid(userId).then((paid) => {
+      if (!cancelled) setKycFeePaid(!!paid);
+    });
+    return () => { cancelled = true; };
+  }, [userId]);
+
   // Load user data from Firebase on mount and set up real-time listener
   useEffect(() => {
     if (!isFirebaseConfigured || !userPhone) return;
@@ -82,6 +109,13 @@ const MainInner = () => {
           if (userProfile.taskCount !== undefined) {
             setCompletedCount(userProfile.taskCount);
           }
+
+          if (userProfile.kycFeePaid !== undefined) {
+            setKycFeePaid(!!userProfile.kycFeePaid);
+          }
+
+          const kycPaid = await isUserKycFeePaid(userId);
+          setKycFeePaid(kycPaid);
         }
       } catch (error) {
         console.error('Failed to load user data from Firebase', error);
@@ -114,6 +148,10 @@ const MainInner = () => {
         // Update task count if changed
         if (userData.taskCount !== undefined) {
           setCompletedCount(userData.taskCount);
+        }
+
+        if (userData.kycFeePaid !== undefined) {
+          setKycFeePaid(!!userData.kycFeePaid);
         }
       }
     }, (error) => {
@@ -234,6 +272,25 @@ const MainInner = () => {
     document.querySelector('.screen-body')?.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
+  const handleNavigateToKycPayment = () => {
+    setShowWithdraw(false);
+    setActiveBottom('setting');
+    setActiveTop('Dashboard');
+    localStorage.setItem('sw_open_kyc_payment', 'true');
+    document.querySelector('.screen-body')?.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const handleFakeKycCompleteFromWithdraw = async () => {
+    if (!userId || !isFirebaseConfigured) return;
+    try {
+      await completeFakeKycPayment(userId);
+      setKycFeePaid(true);
+      setShowWithdraw(false);
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
   const handleTopTab = (tab) => {
     setActiveTop(tab);
     if (tab === 'Daily Task') setActiveBottom('task');
@@ -248,7 +305,6 @@ const MainInner = () => {
     { key: 'Billings', label: t('tab_billings') },
     { key: 'Analytics', label: t('tab_analytics') },
     { key: 'Achievements', label: t('tab_achievements') },
-    { key: 'Admin', label: 'Admin' },
   ];
   const BOTTOM_TABS = [
     { key: 'home', label: t('nav_home'), icon: '🏠' },
@@ -261,11 +317,10 @@ const MainInner = () => {
     if (activeBottom === 'refer') return <ReferTab userName={userName} />;
     if (activeBottom === 'setting') return <SettingTab userName={userName} isPro={isPro} onUpgrade={handleUpgrade} onDowngrade={handleDowngrade} />;
 
-    if (activeTop === 'Daily Task') return <TaskTab userName={userName} isPro={isPro} onUpgrade={handleUpgrade} onTaskComplete={handleTaskComplete} onNavigateToPayment={handleNavigateToPayment} />;
-    if (activeTop === 'Billings') return <BillingsTab isPro={isPro} onUpgrade={handleUpgrade} onDowngrade={handleDowngrade} onNavigateToPayment={handleNavigateToPayment} />;
-    if (activeTop === 'Analytics') return <AnalyticsTab isPro={isPro} completedCount={completedCount} />;
+    if (activeTop === 'Daily Task') return <TaskTab userName={userName} isPro={isPro} onUpgrade={handleUpgrade} onTaskComplete={handleTaskComplete} onNavigateToPayment={handleNavigateToPayment} proPriceAmount={proPriceAmount} />;
+    if (activeTop === 'Billings') return <BillingsTab isPro={isPro} onUpgrade={handleUpgrade} onDowngrade={handleDowngrade} onNavigateToPayment={handleNavigateToPayment} proPriceAmount={proPriceAmount} />;
+    if (activeTop === 'Analytics') return <AnalyticsTab isPro={isPro} completedCount={completedCount} proPriceAmount={proPriceAmount} />;
     if (activeTop === 'Achievements') return <AchievementsTab isPro={isPro} />;
-    if (activeTop === 'Admin') return <AdminTab />;
 
     return (
       <HomeTab
@@ -327,6 +382,12 @@ const MainInner = () => {
       {showWithdraw && (
         <WithdrawSheet
           balance={balance}
+          proPriceAmount={proPriceAmount}
+          kycRequirements={kycRequirements}
+          kycFeePaid={!isFirebaseConfigured || kycFeePaid}
+          onNavigateToKycPayment={handleNavigateToKycPayment}
+          showFakeKyc={SHOW_FAKE_KYC && isFirebaseConfigured}
+          onFakeKycComplete={handleFakeKycCompleteFromWithdraw}
           onClose={() => setShowWithdraw(false)}
           onWithdraw={(amt) => { handleWithdraw(amt); setShowWithdraw(false); }}
         />
@@ -346,9 +407,6 @@ const MainInner = () => {
           </button>
         ))}
       </div>
-
-      {/* ── LIVE NOTIFICATIONS ── */}
-      <LiveNotification />
     </motion.div>
   );
 };

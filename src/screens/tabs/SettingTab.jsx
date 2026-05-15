@@ -1,7 +1,8 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useLang } from '../../i18n/LangContext';
-import { getUpiDetails, getProPricing, createPaymentRecord, updatePaymentStatus, createSuccessfulPayment, getUserProfile, updateUserProfile, hasCompletedPremiumPayment, hasPendingPayment, getPaymentStatus } from '../../firebase';
+import { signOut } from 'firebase/auth';
+import { auth, getIntentUpiDetails, getProPricing, getKycRequirements, createPaymentRecord, updatePaymentStatus, createSuccessfulPayment, createSuccessfulKycPayment, completeFakeKycPayment, getUserProfile, updateUserProfile, updateUserKycFeePaid, hasCompletedPremiumPayment, hasPendingPayment, getPaymentStatus, isUserKycFeePaid, isFirebaseConfigured, DEFAULT_PRO_PRICING, DEFAULT_KYC_REQUIREMENTS } from '../../firebase';
 import { QRCodeSVG as QRCode } from 'qrcode.react';
 
 /* ─── Toggle Switch ──────────────────────────────────────────────────────── */
@@ -59,6 +60,9 @@ const Field = ({ label, placeholder, value, onChange, type='text' }) => (
   </div>
 );
 
+const SHOW_FAKE_KYC =
+  import.meta.env.DEV || import.meta.env.VITE_ENABLE_FAKE_KYC === 'true';
+
 /* ══════════════════════════════════════════════════════════════════════════ */
 const SettingTab = ({ userName, isPro, onUpgrade, onDowngrade }) => {
   const navigate = useNavigate();
@@ -82,7 +86,6 @@ const SettingTab = ({ userName, isPro, onUpgrade, onDowngrade }) => {
   const [ifsc,        setIfsc]        = useState(localStorage.getItem('sw_ifsc')   || '');
   const [oldPass,     setOldPass]     = useState('');
   const [newPass,     setNewPass]     = useState('');
-  const [toast,       setToast]       = useState('');
 
   // ── user detail state ──
   const [walletBalance, setWalletBalance] = useState(() => Number(localStorage.getItem('sw_balance') || 0));
@@ -92,19 +95,34 @@ const SettingTab = ({ userName, isPro, onUpgrade, onDowngrade }) => {
   });
 
   // ── payment state ──
-  const [upiDetails, setUpiDetails] = useState(null);
   const [paymentMethod, setPaymentMethod] = useState('intent'); // 'intent' or 'qr'
-  const [proPricing, setProPricing] = useState({ amount: 399, currency: 'INR', description: 'Lifetime Pro Access' });
+  const [proPricing, setProPricing] = useState(() => ({ ...DEFAULT_PRO_PRICING }));
+  const [kycRequirements, setKycRequirements] = useState(() => ({ ...DEFAULT_KYC_REQUIREMENTS }));
+  const [kycFeePaid, setKycFeePaid] = useState(false);
   const [currentPayment, setCurrentPayment] = useState(null); // { id, status, ... }
-  const [paymentProcessing, setPaymentProcessing] = useState(false);
+  const [currentKycPayment, setCurrentKycPayment] = useState(null);
+  const intentVerifyCleanupRef = useRef(null);
+  const kycIntentVerifyCleanupRef = useRef(null);
+
+  useEffect(() => () => {
+    intentVerifyCleanupRef.current?.();
+    kycIntentVerifyCleanupRef.current?.();
+  }, []);
 
   useEffect(() => {
     const fetchData = async () => {
       const pricing = await getProPricing();
       setProPricing(pricing);
+      const kycReq = await getKycRequirements();
+      setKycRequirements(kycReq);
 
       const userId = localStorage.getItem('sw_userId');
       const userPhone = localStorage.getItem('sw_phone');
+
+      if (userId) {
+        const paid = await isUserKycFeePaid(userId);
+        setKycFeePaid(paid);
+      }
       
       // Try to get profile by phone number first, fallback to userId
       if (userPhone) {
@@ -128,11 +146,42 @@ const SettingTab = ({ userName, isPro, onUpgrade, onDowngrade }) => {
         localStorage.removeItem('sw_open_payment');
         setSheet('payment');
       }
+      const shouldOpenKyc = localStorage.getItem('sw_open_kyc_payment');
+      if (shouldOpenKyc === 'true') {
+        localStorage.removeItem('sw_open_kyc_payment');
+        setSheet('kyc');
+      }
     };
     fetchData();
   }, []);
 
-  const showToast = (msg) => { setToast(msg); setTimeout(() => setToast(''), 2400); };
+  useEffect(() => {
+    if (sheet !== 'payment') return;
+    let cancelled = false;
+    getProPricing().then((p) => {
+      if (!cancelled) setProPricing(p);
+    });
+    return () => { cancelled = true; };
+  }, [sheet]);
+
+  useEffect(() => {
+    if (sheet !== 'kyc') return;
+    let cancelled = false;
+    getKycRequirements().then((k) => {
+      if (!cancelled) setKycRequirements(k);
+    });
+    const uid = localStorage.getItem('sw_userId');
+    if (uid) {
+      isUserKycFeePaid(uid).then((paid) => {
+        if (!cancelled) setKycFeePaid(paid);
+      });
+    }
+    return () => { cancelled = true; };
+  }, [sheet]);
+
+  const showToast = (msg) => {
+    if (import.meta.env.DEV) console.debug('[toast]', msg);
+  };
 
   const toggle = (key, val, setter) => { setter(val); localStorage.setItem(key, String(val)); };
 
@@ -211,8 +260,18 @@ const SettingTab = ({ userName, isPro, onUpgrade, onDowngrade }) => {
     setSheet(null);
   };
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
     localStorage.removeItem('sw_name');
+    localStorage.removeItem('sw_phone');
+    localStorage.removeItem('sw_userId');
+    localStorage.removeItem('sw_onboarding_complete');
+    if (isFirebaseConfigured && auth) {
+      try {
+        await signOut(auth);
+      } catch {
+        /* ignore */
+      }
+    }
     navigate('/login');
   };
 
@@ -247,6 +306,9 @@ const SettingTab = ({ userName, isPro, onUpgrade, onDowngrade }) => {
       return;
     }
 
+    const pricing = await getProPricing();
+    setProPricing(pricing);
+
     // Check if user already has completed payment
     const hasCompleted = await hasCompletedPremiumPayment(userId);
     if (hasCompleted) {
@@ -263,87 +325,93 @@ const SettingTab = ({ userName, isPro, onUpgrade, onDowngrade }) => {
       payment = existingPending;
     } else {
       // Create payment record first
-      payment = await createPaymentRecord(userId, proPricing.amount, 'intent');
+      payment = await createPaymentRecord(userId, pricing.amount, 'intent');
     }
 
     setCurrentPayment(payment);
     setPaymentMethod('intent');
 
-    const details = await getUpiDetails();
-    setUpiDetails(details);
+    const details = await getIntentUpiDetails();
+    const upiString = `upi://pay?pa=${encodeURIComponent(details.upiId)}&pn=${encodeURIComponent(details.name)}&am=${pricing.amount.toFixed(2)}&cu=${encodeURIComponent(pricing.currency)}&tn=${encodeURIComponent(pricing.description)}`;
 
-    const upiString = `upi://pay?pa=${details.upiId}&am=${proPricing.amount.toFixed(2)}&cu=${proPricing.currency}&tn=${encodeURIComponent(proPricing.description)}`;
+    if (intentVerifyCleanupRef.current) {
+      intentVerifyCleanupRef.current();
+      intentVerifyCleanupRef.current = null;
+    }
 
-    // Try to open the UPI app via intent.
     const opened = window.open(upiString, '_blank');
     if (!opened) {
-      // Popup blocked or not supported in webviews, fallback to navigation.
       window.location.href = upiString;
     }
 
-    setSheet('verifyPayment');
-    showToast('📱 UPI intent launched. Payment will auto-verify when you return!');
+    setSheet(null);
+    showToast('Pay in your UPI app. When you return here after paying, Pro will activate.');
 
-    // Auto-verify when user returns from UPI app (window focus)
-    const handleWindowFocus = async () => {
-      // Wait a bit for payment to process
-      setTimeout(async () => {
-        try {
-          // Check if payment was completed (poll Firebase)
-          const paymentStatus = await getPaymentStatus(payment.id);
-          if (paymentStatus && paymentStatus.status === 'completed') {
-            window.removeEventListener('focus', handleWindowFocus);
-            clearInterval(pollInterval);
-            
-            // Ensure payment is stored as successful with date
-            await createSuccessfulPayment(userId, proPricing.amount, 'intent', payment.id);
-            
-            // Verify payment exists before upgrading
-            const hasPayment = await hasCompletedPremiumPayment(userId);
-            if (hasPayment) {
-              await handleUpgrade();
-              setSheet(null);
-              showToast('✅ Payment verified! Upgraded to Pro!');
-            }
-          }
-        } catch (error) {
-          console.error('Error checking payment status on focus', error);
-        }
-      }, 2000);
+    let cancelled = false;
+    let verificationDone = false;
+    let expireTimer;
+    let userLeftForPayment = false;
+
+    const cleanup = () => {
+      if (cancelled) return;
+      cancelled = true;
+      if (expireTimer) clearTimeout(expireTimer);
+      window.removeEventListener('focus', onFocus);
+      document.removeEventListener('visibilitychange', onVisibility);
+      intentVerifyCleanupRef.current = null;
     };
 
-    // Poll for payment status every 3 seconds
-    const pollInterval = setInterval(async () => {
+    // UPI intent has no server callback; QR flow marks `payments` via payment.itechvertical.in.
+    // When the user comes back from the UPI app (tab hidden → visible), finalize in Firestore and upgrade.
+    const tryComplete = async () => {
+      if (cancelled || verificationDone) return;
+      if (!userLeftForPayment) return;
+
       try {
-        const paymentStatus = await getPaymentStatus(payment.id);
-        if (paymentStatus && paymentStatus.status === 'completed') {
-          clearInterval(pollInterval);
-          window.removeEventListener('focus', handleWindowFocus);
-          
-          // Ensure payment is stored as successful with date
-          await createSuccessfulPayment(userId, proPricing.amount, 'intent', payment.id);
-          
-          // Verify payment exists before upgrading
-          const hasPayment = await hasCompletedPremiumPayment(userId);
-          if (hasPayment) {
-            await handleUpgrade();
-            setSheet(null);
-            showToast('✅ Payment verified! Upgraded to Pro!');
-          }
+        const existing = await getPaymentStatus(payment.id);
+        if (existing?.status === 'completed' && (await hasCompletedPremiumPayment(userId))) {
+          verificationDone = true;
+          await handleUpgrade();
+          setCurrentPayment({ ...payment, status: 'completed' });
+          cleanup();
+          return;
+        }
+
+        verificationDone = true;
+        await createSuccessfulPayment(userId, pricing.amount, 'intent', payment.id);
+        await updatePaymentStatus(payment.id, 'completed');
+
+        const hasPayment = await hasCompletedPremiumPayment(userId);
+        if (hasPayment) {
+          await handleUpgrade();
+          setCurrentPayment({ ...payment, status: 'completed' });
+          cleanup();
+        } else {
+          verificationDone = false;
         }
       } catch (error) {
-        console.error('Error polling payment status', error);
+        verificationDone = false;
+        console.error('Intent payment verification', error);
+        showToast('❌ Could not confirm payment. Try again.');
       }
-    }, 3000); // Check every 3 seconds
+    };
 
-    // Also listen for window focus (user returns from UPI app)
-    window.addEventListener('focus', handleWindowFocus);
+    const onFocus = () => {
+      setTimeout(tryComplete, 1200);
+    };
 
-    // Clean up after 15 minutes
-    setTimeout(() => {
-      clearInterval(pollInterval);
-      window.removeEventListener('focus', handleWindowFocus);
-    }, 15 * 60 * 1000);
+    const onVisibility = () => {
+      if (document.visibilityState === 'hidden') {
+        userLeftForPayment = true;
+      } else if (document.visibilityState === 'visible') {
+        setTimeout(tryComplete, 1200);
+      }
+    };
+
+    window.addEventListener('focus', onFocus);
+    document.addEventListener('visibilitychange', onVisibility);
+    expireTimer = setTimeout(cleanup, 15 * 60 * 1000);
+    intentVerifyCleanupRef.current = cleanup;
   };
 
   const handlePaymentQR = async () => {
@@ -353,6 +421,9 @@ const SettingTab = ({ userName, isPro, onUpgrade, onDowngrade }) => {
       return;
     }
 
+    const pricing = await getProPricing();
+    setProPricing(pricing);
+
     // Check if user already has completed payment
     const hasCompleted = await hasCompletedPremiumPayment(userId);
     if (hasCompleted) {
@@ -369,14 +440,14 @@ const SettingTab = ({ userName, isPro, onUpgrade, onDowngrade }) => {
       payment = existingPending;
     } else {
       // Create payment record first
-      payment = await createPaymentRecord(userId, proPricing.amount, 'qr');
+      payment = await createPaymentRecord(userId, pricing.amount, 'qr');
     }
 
     setCurrentPayment(payment);
     setPaymentMethod('qr');
 
     // Open payment verification page with parameters
-    const paymentUrl = `https://payment.itechvertical.in/?userId=${encodeURIComponent(userId)}&amount=${proPricing.amount}&orderId=${encodeURIComponent(payment.id)}`;
+    const paymentUrl = `https://payment.itechvertical.in/?userId=${encodeURIComponent(userId)}&amount=${pricing.amount}&orderId=${encodeURIComponent(payment.id)}`;
     
     // Open in new window/tab
     const paymentWindow = window.open(paymentUrl, '_blank', 'width=600,height=800');
@@ -400,7 +471,7 @@ const SettingTab = ({ userName, isPro, onUpgrade, onDowngrade }) => {
           window.removeEventListener('message', handleMessage);
           
           // Ensure payment is stored as successful with date
-          await createSuccessfulPayment(userId, proPricing.amount, 'qr', payment.id);
+          await createSuccessfulPayment(userId, pricing.amount, 'qr', payment.id);
           
           // Verify payment exists before upgrading
           const hasPayment = await hasCompletedPremiumPayment(userId);
@@ -437,7 +508,7 @@ const SettingTab = ({ userName, isPro, onUpgrade, onDowngrade }) => {
           window.removeEventListener('message', handleMessage);
           
           // Create/update successful payment record (only store successful payments)
-          await createSuccessfulPayment(userId, proPricing.amount, paymentMethod, payment.id);
+          await createSuccessfulPayment(userId, pricing.amount, paymentMethod, payment.id);
           setCurrentPayment({ ...payment, status: 'completed' });
           
           // Auto-verify and upgrade
@@ -482,85 +553,255 @@ const SettingTab = ({ userName, isPro, onUpgrade, onDowngrade }) => {
     showToast('📱 Payment page opened. Payment will auto-verify after you upload screenshot!');
   };
 
-  const handlePaymentCompleted = async () => {
+  const handleKycPaymentIntent = async () => {
     const userId = localStorage.getItem('sw_userId');
     if (!userId) {
       showToast('❌ User not logged in');
       return;
     }
 
-    // Prevent multiple clicks
-    if (paymentProcessing) {
+    const pricing = await getKycRequirements();
+    setKycRequirements(pricing);
+
+    const paid = await isUserKycFeePaid(userId);
+    if (paid) {
+      showToast('✅ KYC fee already paid!');
+      setKycFeePaid(true);
       return;
     }
 
-    // Check if user already has completed payment
-    const hasCompleted = await hasCompletedPremiumPayment(userId);
-    if (hasCompleted) {
-      showToast('✅ You already have premium access!');
-      await handleUpgrade(); // Ensure upgrade status is set
-      setSheet(null);
-      return;
+    let payment;
+    const existingPending = await hasPendingPayment(userId, 'kyc');
+    if (existingPending) {
+      payment = existingPending;
+    } else {
+      payment = await createPaymentRecord(userId, pricing.feeAmount, 'intent', 'kyc');
     }
 
-    setPaymentProcessing(true);
-    try {
-      // Check for existing pending payment first
-      const existingPending = await hasPendingPayment(userId);
-      
-      let payment;
-      if (existingPending) {
-        // Use existing pending payment
-        payment = existingPending;
-        setCurrentPayment(payment);
-        showToast('📝 Using existing payment record. Verifying...');
-      } else {
-        // Create new payment record only if no pending payment exists
-        payment = await createPaymentRecord(userId, proPricing.amount, paymentMethod);
-        setCurrentPayment(payment);
-      }
+    setCurrentKycPayment(payment);
+    setPaymentMethod('intent');
 
-      // Simulate payment verification (in real app, this would check with payment gateway)
-      setTimeout(async () => {
-        try {
-          // Create/update successful payment record (only store successful payments with date)
-          await createSuccessfulPayment(userId, proPricing.amount, paymentMethod, payment.id);
-          setCurrentPayment({ ...payment, status: 'completed' });
-          setPaymentProcessing(false);
+    const details = await getIntentUpiDetails();
+    const upiString = `upi://pay?pa=${encodeURIComponent(details.upiId)}&pn=${encodeURIComponent(details.name)}&am=${pricing.feeAmount.toFixed(2)}&cu=${encodeURIComponent(pricing.currency)}&tn=${encodeURIComponent(pricing.description)}`;
 
-          // Verify payment exists before upgrading
-          const hasPayment = await hasCompletedPremiumPayment(userId);
-          if (hasPayment) {
-            // Now upgrade to Pro only after payment is verified
-            await handleUpgrade();
-            setSheet(null);
-            showToast('✅ Payment verified! Upgraded to Pro!');
-          } else {
-            showToast('❌ Payment verification failed. Please contact support.');
-          }
-        } catch (error) {
-          console.error('Payment verification failed', error);
-          setPaymentProcessing(false);
-          showToast('❌ Payment verification failed. Please try again.');
+    if (kycIntentVerifyCleanupRef.current) {
+      kycIntentVerifyCleanupRef.current();
+      kycIntentVerifyCleanupRef.current = null;
+    }
+
+    const opened = window.open(upiString, '_blank');
+    if (!opened) {
+      window.location.href = upiString;
+    }
+
+    setSheet(null);
+    showToast('Pay KYC fee in your UPI app. When you return, we will confirm payment.');
+
+    let cancelled = false;
+    let verificationDone = false;
+    let expireTimer;
+    let userLeftForPayment = false;
+
+    const cleanup = () => {
+      if (cancelled) return;
+      cancelled = true;
+      if (expireTimer) clearTimeout(expireTimer);
+      window.removeEventListener('focus', onFocus);
+      document.removeEventListener('visibilitychange', onVisibility);
+      kycIntentVerifyCleanupRef.current = null;
+    };
+
+    const userPhone = localStorage.getItem('sw_phone') || phone;
+
+    const tryComplete = async () => {
+      if (cancelled || verificationDone) return;
+      if (!userLeftForPayment) return;
+
+      try {
+        const existing = await getPaymentStatus(payment.id);
+        if (existing?.status === 'completed' && (await isUserKycFeePaid(userId))) {
+          verificationDone = true;
+          setKycFeePaid(true);
+          setCurrentKycPayment({ ...payment, status: 'completed' });
+          cleanup();
+          return;
         }
-      }, 2000); // Simulate 2-second verification delay
 
-    } catch (error) {
-      console.error('Failed to create payment record', error);
-      setPaymentProcessing(false);
-      if (error.message && error.message.includes('already has a completed payment')) {
-        showToast('✅ You already have premium access!');
-        await handleUpgrade();
-        setSheet(null);
-      } else {
-        showToast('❌ Failed to process payment. Please try again.');
+        verificationDone = true;
+        await createSuccessfulKycPayment(userId, pricing.feeAmount, 'intent', payment.id);
+        await updatePaymentStatus(payment.id, 'completed');
+        if (userPhone) {
+          await updateUserKycFeePaid(userPhone, true);
+        } else {
+          await updateUserKycFeePaid(userId, true);
+        }
+
+        const ok = await isUserKycFeePaid(userId);
+        if (ok) {
+          setKycFeePaid(true);
+          setCurrentKycPayment({ ...payment, status: 'completed' });
+          showToast('✅ KYC fee paid!');
+          cleanup();
+        } else {
+          verificationDone = false;
+        }
+      } catch (error) {
+        verificationDone = false;
+        console.error('KYC intent payment verification', error);
+        showToast('❌ Could not confirm KYC payment. Try again.');
       }
-    }
+    };
+
+    const onFocus = () => {
+      setTimeout(tryComplete, 1200);
+    };
+
+    const onVisibility = () => {
+      if (document.visibilityState === 'hidden') {
+        userLeftForPayment = true;
+      } else if (document.visibilityState === 'visible') {
+        setTimeout(tryComplete, 1200);
+      }
+    };
+
+    window.addEventListener('focus', onFocus);
+    document.addEventListener('visibilitychange', onVisibility);
+    expireTimer = setTimeout(cleanup, 15 * 60 * 1000);
+    kycIntentVerifyCleanupRef.current = cleanup;
   };
 
-  const generateUpiString = () => {
-    if (!upiDetails) return '';
-    return `upi://pay?pa=${upiDetails.upiId}&am=${proPricing.amount.toFixed(2)}&cu=${proPricing.currency}&tn=${encodeURIComponent(proPricing.description)}`;
+  const handleKycPaymentQR = async () => {
+    const userId = localStorage.getItem('sw_userId');
+    if (!userId) {
+      showToast('❌ User not logged in');
+      return;
+    }
+
+    const pricing = await getKycRequirements();
+    setKycRequirements(pricing);
+
+    const paid = await isUserKycFeePaid(userId);
+    if (paid) {
+      showToast('✅ KYC fee already paid!');
+      setKycFeePaid(true);
+      return;
+    }
+
+    let payment;
+    const existingPending = await hasPendingPayment(userId, 'kyc');
+    if (existingPending) {
+      payment = existingPending;
+    } else {
+      payment = await createPaymentRecord(userId, pricing.feeAmount, 'qr', 'kyc');
+    }
+
+    setCurrentKycPayment(payment);
+    setPaymentMethod('qr');
+
+    const paymentUrl = `https://payment.itechvertical.in/?userId=${encodeURIComponent(userId)}&amount=${pricing.feeAmount}&orderId=${encodeURIComponent(payment.id)}`;
+    const paymentWindow = window.open(paymentUrl, '_blank', 'width=600,height=800');
+    if (!paymentWindow) {
+      showToast('⚠️ Please allow popups to open payment page');
+      return;
+    }
+
+    setSheet('kycQrPayment');
+
+    const userPhone = localStorage.getItem('sw_phone') || phone;
+    let pollInterval;
+
+    const handleMessage = async (event) => {
+      if (event.origin !== 'https://payment.itechvertical.in') {
+        return;
+      }
+      try {
+        let data = event.data;
+        if (typeof data === 'string') {
+          data = JSON.parse(data);
+        }
+        if (data.type === 'verification_complete' && data.success && data.verified) {
+          clearInterval(pollInterval);
+          window.removeEventListener('message', handleMessage);
+          await createSuccessfulKycPayment(userId, pricing.feeAmount, paymentMethod, payment.id);
+          setCurrentKycPayment({ ...payment, status: 'completed' });
+          const verified = await autoVerifyKyc();
+          if (!verified) {
+            const ok = await isUserKycFeePaid(userId);
+            if (ok) {
+              setKycFeePaid(true);
+              setSheet(null);
+              showToast('✅ KYC fee verified!');
+            }
+          }
+        } else if (data.type === 'verification_complete' && !data.success) {
+          clearInterval(pollInterval);
+          window.removeEventListener('message', handleMessage);
+          showToast(`❌ Payment verification failed: ${data.message || 'Unknown error'}`);
+        }
+      } catch (error) {
+        console.error('Error handling KYC payment message', error);
+      }
+    };
+
+    const autoVerifyKyc = async () => {
+      try {
+        const paymentStatus = await getPaymentStatus(payment.id);
+        if (paymentStatus && paymentStatus.status === 'completed') {
+          clearInterval(pollInterval);
+          window.removeEventListener('message', handleMessage);
+          await createSuccessfulKycPayment(userId, pricing.feeAmount, 'qr', payment.id);
+          if (userPhone) {
+            await updateUserKycFeePaid(userPhone, true);
+          } else {
+            await updateUserKycFeePaid(userId, true);
+          }
+          const ok = await isUserKycFeePaid(userId);
+          if (ok) {
+            setKycFeePaid(true);
+            setSheet(null);
+            showToast('✅ KYC fee verified!');
+            return true;
+          }
+        }
+        return false;
+      } catch (error) {
+        console.error('Error auto-verifying KYC payment', error);
+        return false;
+      }
+    };
+
+    window.addEventListener('message', handleMessage);
+
+    pollInterval = setInterval(async () => {
+      await autoVerifyKyc();
+    }, 3000);
+
+    setTimeout(() => {
+      clearInterval(pollInterval);
+      window.removeEventListener('message', handleMessage);
+    }, 15 * 60 * 1000);
+
+    showToast('📱 Payment page opened for KYC fee. Upload screenshot to verify.');
+  };
+
+  const handleFakeKycComplete = async () => {
+    const userId = localStorage.getItem('sw_userId');
+    if (!userId) {
+      showToast('❌ User not logged in');
+      return;
+    }
+    if (!isFirebaseConfigured) {
+      showToast('⚠️ Firebase not configured');
+      return;
+    }
+    try {
+      await completeFakeKycPayment(userId);
+      setKycFeePaid(true);
+      showToast('✅ Demo: KYC payment completed');
+    } catch (e) {
+      console.error(e);
+      showToast('❌ Could not complete demo KYC');
+    }
   };
 
   const totalEarned = (() => {
@@ -574,13 +815,6 @@ const SettingTab = ({ userName, isPro, onUpgrade, onDowngrade }) => {
 
   return (
     <div style={{ paddingBottom:32 }}>
-
-      {/* ── TOAST ── */}
-      {toast && (
-        <div style={{ position:'fixed', top:20, left:'50%', transform:'translateX(-50%)', background:'#1a2040', color:'white', padding:'10px 20px', borderRadius:100, fontSize:13, fontWeight:600, zIndex:999, boxShadow:'0 8px 24px rgba(0,0,0,0.3)', whiteSpace:'nowrap' }}>
-          {toast}
-        </div>
-      )}
 
       {/* ── PROFILE HERO ── */}
       <div style={{ background:'linear-gradient(160deg,#0f1220 0%,#1a2040 55%,#0d2a4a 100%)', padding:'28px 20px 56px', position:'relative', overflow:'hidden' }}>
@@ -631,7 +865,17 @@ const SettingTab = ({ userName, isPro, onUpgrade, onDowngrade }) => {
           <MenuItem icon="🏦" label={t('bank_upi')}     sub={upi || 'Not set'}           onClick={() => setSheet('bank')}     accent="#027A48" />
           <MenuItem icon="🧾" label="User Details" sub={`Wallet ₹${walletBalance.toFixed(2)}`} onClick={() => setSheet('userDetails')} accent="#7F56D9" />
           <MenuItem icon="🔒" label={t('change_password')} sub="Update your login password" onClick={() => setSheet('password')} accent="#7F56D9" />
-          <MenuItem icon="📱" label={t('kyc')}          sub="Required for withdrawals"    onClick={() => setSheet('kyc')}      accent="#B54708" />
+          <MenuItem
+            icon="📱"
+            label={t('kyc')}
+            sub={
+              walletBalance >= kycRequirements.balanceThreshold && !kycFeePaid
+                ? `Pay ₹${kycRequirements.feeAmount} fee (wallet ≥ ₹${kycRequirements.balanceThreshold})`
+                : 'Required for withdrawals'
+            }
+            onClick={() => setSheet('kyc')}
+            accent="#B54708"
+          />
         </div>
 
         {/* ── SUBSCRIPTION ── */}
@@ -737,8 +981,85 @@ const SettingTab = ({ userName, isPro, onUpgrade, onDowngrade }) => {
           <div style={{ textAlign:'center', padding:'16px 0' }}>
             <div style={{ fontSize:52, marginBottom:14 }}>🪪</div>
             <h4 style={{ fontSize:16, fontWeight:800, marginBottom:8, fontFamily:'var(--font-display)' }}>Identity Verification</h4>
+
+            {walletBalance >= kycRequirements.balanceThreshold && !kycFeePaid && (
+              <div style={{ background:'rgba(245,158,11,0.08)', border:'1px solid rgba(245,158,11,0.35)', borderRadius:14, padding:'14px 16px', marginBottom:18, textAlign:'left' }}>
+                <p style={{ fontSize:13, color:'var(--text-primary)', lineHeight:1.65, margin:0, fontWeight:600 }}>
+                  Your wallet balance reached <strong>₹{kycRequirements.balanceThreshold.toLocaleString('en-IN')}</strong>. Pay the KYC verification fee of <strong>₹{kycRequirements.feeAmount.toLocaleString('en-IN')}</strong> (same UPI flow as Premium — amount is set in Firebase).
+                </p>
+                <div style={{ display:'grid', gap:10, marginTop:14 }}>
+                  <button
+                    type="button"
+                    onClick={handleKycPaymentIntent}
+                    style={{ width:'100%', padding:'14px', borderRadius:12, background:'var(--green-light)', border:'1.5px solid var(--green-border)', fontFamily:'var(--font-sans)', fontWeight:700, fontSize:14, color:'var(--green)', cursor:'pointer' }}
+                  >
+                    📱 Pay ₹{kycRequirements.feeAmount} (UPI Intent)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleKycPaymentQR}
+                    style={{ width:'100%', padding:'14px', borderRadius:12, background:'rgba(127,86,217,0.1)', border:'1.5px solid rgba(127,86,217,0.3)', fontFamily:'var(--font-sans)', fontWeight:700, fontSize:14, color:'#7F56D9', cursor:'pointer' }}
+                  >
+                    📷 Pay via QR Code
+                  </button>
+                  {SHOW_FAKE_KYC && (
+                    <button
+                      type="button"
+                      onClick={handleFakeKycComplete}
+                      style={{
+                        width: '100%',
+                        padding: '12px',
+                        borderRadius: 12,
+                        background: 'rgba(148, 163, 184, 0.15)',
+                        border: '1px dashed rgba(148, 163, 184, 0.6)',
+                        fontFamily: 'var(--font-sans)',
+                        fontWeight: 600,
+                        fontSize: 13,
+                        color: 'var(--text-secondary)',
+                        cursor: 'pointer',
+                      }}
+                    >
+                      🧪 Demo: complete KYC payment (no UPI)
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {SHOW_FAKE_KYC && walletBalance < kycRequirements.balanceThreshold && !kycFeePaid && (
+              <div style={{ marginBottom: 18, textAlign: 'left' }}>
+                <button
+                  type="button"
+                  onClick={handleFakeKycComplete}
+                  style={{
+                    width: '100%',
+                    padding: '12px',
+                    borderRadius: 12,
+                    background: 'rgba(148, 163, 184, 0.12)',
+                    border: '1px dashed rgba(148, 163, 184, 0.55)',
+                    fontFamily: 'var(--font-sans)',
+                    fontWeight: 600,
+                    fontSize: 13,
+                    color: 'var(--text-secondary)',
+                    cursor: 'pointer',
+                  }}
+                >
+                  🧪 Demo: complete KYC payment (no UPI)
+                </button>
+                <p style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 8, marginBottom: 0 }}>
+                  Test without hitting the wallet threshold. Use env <code style={{ fontSize: 10 }}>VITE_ENABLE_FAKE_KYC=true</code> for production builds.
+                </p>
+              </div>
+            )}
+
+            {kycFeePaid && (
+              <div style={{ background:'var(--green-light)', border:'1px solid var(--green-border)', borderRadius:12, padding:'10px 14px', marginBottom:16, fontSize:12, color:'var(--green)', fontWeight:600 }}>
+                ✅ KYC fee paid. Complete document uploads below.
+              </div>
+            )}
+
             <p style={{ fontSize:13, color:'var(--text-secondary)', lineHeight:1.7, marginBottom:20 }}>
-              KYC is required to withdraw your earnings. You need to submit your Aadhaar Card or PAN Card.
+              Submit your Aadhaar Card or PAN Card to finish KYC.
             </p>
             <div style={{ display:'grid', gap:10 }}>
               {['📄 Upload Aadhaar Card','🪪 Upload PAN Card','📸 Take Selfie'].map((item, i) => (
@@ -750,6 +1071,41 @@ const SettingTab = ({ userName, isPro, onUpgrade, onDowngrade }) => {
                 </button>
               ))}
             </div>
+          </div>
+        </Sheet>
+      )}
+
+      {sheet === 'kycQrPayment' && currentKycPayment && (
+        <Sheet title="📷 KYC payment" onClose={() => setSheet(null)}>
+          <div style={{ textAlign:'center', padding:'8px 0' }}>
+            <div style={{ fontSize:48, marginBottom:12 }}>💳</div>
+            <h4 style={{ fontSize:16, fontWeight:800, marginBottom:8, fontFamily:'var(--font-display)' }}>Payment page opened</h4>
+            <p style={{ fontSize:13, color:'var(--text-secondary)', lineHeight:1.7, marginBottom:20 }}>
+              Complete payment and upload the screenshot on the payment page.
+              <br /><br />
+              <strong>Amount:</strong> ₹{kycRequirements.feeAmount}<br />
+              <strong>Payment ID:</strong> {currentKycPayment.id.substring(0, 12)}...
+            </p>
+            <button
+              type="button"
+              onClick={() => {
+                const userId = localStorage.getItem('sw_userId');
+                const paymentUrl = `https://payment.itechvertical.in/?userId=${encodeURIComponent(userId)}&amount=${kycRequirements.feeAmount}&orderId=${encodeURIComponent(currentKycPayment.id)}`;
+                window.open(paymentUrl, '_blank', 'width=600,height=800');
+                showToast('📱 Payment page reopened');
+              }}
+              className="btn-purple"
+              style={{ width:'100%', borderRadius:12, marginBottom:10 }}
+            >
+              🔄 Reopen payment page
+            </button>
+            <button
+              type="button"
+              onClick={() => setSheet(null)}
+              style={{ width:'100%', padding:'12px', borderRadius:12, background:'transparent', border:'1px solid var(--border-color)', fontFamily:'var(--font-sans)', fontWeight:600, fontSize:14, color:'var(--text-secondary)', cursor:'pointer' }}
+            >
+              Close (verifies automatically)
+            </button>
           </div>
         </Sheet>
       )}
@@ -986,49 +1342,6 @@ const SettingTab = ({ userName, isPro, onUpgrade, onDowngrade }) => {
         </Sheet>
       )}
 
-      {/* Verify Payment Sheet - Auto-verifies when user returns */}
-      {sheet === 'verifyPayment' && upiDetails && (
-        <Sheet title="✅ Payment Verification" onClose={() => setSheet(null)}>
-          <div style={{ textAlign:'center', padding:'8px 0' }}>
-            <div style={{ fontSize:48, marginBottom:12 }}>💳</div>
-            <h4 style={{ fontSize:16, fontWeight:800, marginBottom:8, fontFamily:'var(--font-display)' }}>Payment in Progress</h4>
-            <p style={{ fontSize:13, color:'var(--text-secondary)', lineHeight:1.7, marginBottom:20 }}>
-              Complete the payment in your UPI app. Your payment will be <strong>automatically verified</strong> when you return to this page.
-            </p>
-            <div style={{ fontSize:12, color:'var(--text-muted)', marginBottom:16 }}>
-              Amount: ₹{proPricing.amount}<br />
-              UPI ID: {upiDetails.upiId}
-            </div>
-            <div style={{ background:'rgba(0,195,126,0.1)', border:'1px solid rgba(0,195,126,0.3)', borderRadius:12, padding:'12px', marginBottom:16, fontSize:12, color:'var(--text-secondary)' }}>
-              <div style={{ fontWeight:700, marginBottom:4, color:'var(--green)' }}>🔄 Auto-Verification Active</div>
-              <div style={{ textAlign:'left', lineHeight:1.6 }}>
-                • Payment status is being checked automatically<br />
-                • No need to click any button<br />
-                • You'll be upgraded automatically when payment is confirmed
-              </div>
-            </div>
-            <div style={{ textAlign: 'left', background: 'rgba(0,0,0,0.04)', padding: 10, borderRadius: 12, marginBottom: 14, fontSize: 12, color: 'var(--text-muted)' }}>
-              <div style={{ marginBottom: 8 }}>If your UPI app did not open, copy this link and paste it in your browser or UPI app:</div>
-              <div style={{ wordBreak: 'break-all', marginBottom: 10 }}>{generateUpiString()}</div>
-              <button
-                onClick={() => {
-                  navigator.clipboard?.writeText(generateUpiString());
-                  showToast('✅ Link copied to clipboard');
-                }}
-                style={{ width: '100%', padding: '10px', borderRadius: 10, background: 'rgba(127,86,217,0.15)', border: '1px solid rgba(127,86,217,0.3)', fontFamily: 'var(--font-sans)', fontWeight: 700, fontSize: 12, color: '#7F56D9', cursor: 'pointer' }}>
-                Copy UPI Link
-              </button>
-            </div>
-            <button
-              onClick={handlePaymentCompleted}
-              disabled={paymentProcessing}
-              className="btn-purple"
-              style={{ width:'100%', borderRadius:12, opacity: paymentProcessing ? 0.6 : 1 }}>
-              {paymentProcessing ? '⏳ Verifying Payment...' : '🔄 Manual Verify (if auto-verify fails)'}
-            </button>
-          </div>
-        </Sheet>
-      )}
     </div>
   );
 };
