@@ -204,8 +204,6 @@ const TaskDetailModal = ({ task, onClose, onTaskComplete }) => {
     const done = JSON.parse(localStorage.getItem('sw_done_ids') || '[]');
     if (!done.includes(task.id)) done.push(task.id);
     localStorage.setItem('sw_done_ids', JSON.stringify(done));
-    const bal = parseFloat(localStorage.getItem('sw_balance') || '0');
-    localStorage.setItem('sw_balance', (bal + task.reward).toFixed(2));
   };
 
   // Real download: create link and click it

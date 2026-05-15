@@ -106,10 +106,10 @@ const BadgeCard = ({ badge, isNew }) => {
 };
 
 /* ─── Main AchievementsTab ───────────────────────────────────────────────── */
-const AchievementsTab = ({ isPro }) => {
+const AchievementsTab = ({ isPro, totalEarned = 0, walletBalance = 0 }) => {
   // ── Real stats from localStorage ──
   const completed = (() => { try { return JSON.parse(localStorage.getItem('sw_completed') || '[]'); } catch { return []; } })();
-  const balance = parseFloat(localStorage.getItem('sw_balance') || '0');
+  const earnedForAchievements = Math.max(Number(totalEarned) || 0, parseFloat(localStorage.getItem('sw_total_earned') || '0'));
   const team = (() => { try { return JSON.parse(localStorage.getItem('sw_team') || '[]'); } catch { return []; } })();
 
   // Streak calc
@@ -128,7 +128,7 @@ const AchievementsTab = ({ isPro }) => {
     daysActive = Math.max(1, Math.floor((Date.now() - new Date(earliest).getTime()) / 86400000) + 1);
   }
 
-  const stats = { tasks: completed.length, balance, streak, teamSize: team.length, daysActive };
+  const stats = { tasks: completed.length, balance: earnedForAchievements, streak, teamSize: team.length, daysActive };
   const achievements = buildAchievements(stats);
 
   // Track previously-seen unlocked IDs to show NEW ribbon
@@ -193,7 +193,7 @@ const AchievementsTab = ({ isPro }) => {
             {[
               { label: 'Tasks', val: stats.tasks, color: '#7F56D9' },
               { label: 'Streak', val: `${streak}d`, color: '#ef4444' },
-              { label: 'Earned', val: `₹${Math.floor(balance)}`, color: 'var(--green)' },
+              { label: 'Earned', val: `₹${Math.floor(stats.balance)}`, color: 'var(--green)' },
               { label: 'Team', val: team.length, color: '#2563eb' },
             ].map((s, i) => (
               <div key={i} style={{ padding: '13px 8px', textAlign: 'center', borderRight: i < 3 ? '1px solid var(--border-color)' : 'none' }}>

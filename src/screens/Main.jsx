@@ -10,7 +10,8 @@ import AnalyticsTab from './tabs/AnalyticsTab';
 import WithdrawSheet from './tabs/WithdrawSheet';
 import AchievementsTab from './tabs/AchievementsTab';
 import { useLang } from '../i18n/LangContext';
-import { getUserProfile, isUserPremium, updateUserTaskCount, updateUserWalletBalance, isFirebaseConfigured, db, getProPricing, DEFAULT_PRO_PRICING, getKycRequirements, DEFAULT_KYC_REQUIREMENTS, isUserKycFeePaid, completeFakeKycPayment, isUserBlocked, getBlockedUserMessage } from '../firebase';
+import { getUserProfile, isUserPremium, updateUserTaskCount, applyWalletTransaction, ensureUserWalletTotals, isFirebaseConfigured, db, getProPricing, DEFAULT_PRO_PRICING, getKycRequirements, DEFAULT_KYC_REQUIREMENTS, isUserKycFeePaid, completeFakeKycPayment, isUserBlocked, getBlockedUserMessage } from '../firebase';
+import { sumLocalTaskRewards } from '../utils/wallet';
 import { doc, onSnapshot } from 'firebase/firestore';
 import { clearUserSession, setStoredBlockMessage } from '../utils/accountSession';
 
@@ -57,6 +58,9 @@ const MainInner = () => {
 
   const [balance, setBalance] = useState(() =>
     parseFloat(localStorage.getItem('sw_balance') || '0')
+  );
+  const [totalEarned, setTotalEarned] = useState(() =>
+    parseFloat(localStorage.getItem('sw_total_earned') || '0')
   );
   const [completedCount, setCompletedCount] = useState(() => {
     try { return JSON.parse(localStorage.getItem('sw_completed') || '[]').length; }
@@ -115,9 +119,18 @@ const MainInner = () => {
           localStorage.setItem('sw_pro', premiumStatus ? 'true' : 'false');
 
           // Update balance if stored in Firebase
+          const identifier = userPhone || userId;
+          if (identifier) {
+            await ensureUserWalletTotals(identifier, sumLocalTaskRewards());
+          }
+
           if (userProfile.walletBalance !== undefined) {
             setBalance(userProfile.walletBalance);
             localStorage.setItem('sw_balance', String(userProfile.walletBalance));
+          }
+          if (userProfile.totalEarned !== undefined) {
+            setTotalEarned(userProfile.totalEarned);
+            localStorage.setItem('sw_total_earned', String(userProfile.totalEarned));
           }
 
           // Update task count if stored in Firebase
@@ -164,6 +177,10 @@ const MainInner = () => {
           setBalance(userData.walletBalance);
           localStorage.setItem('sw_balance', String(userData.walletBalance));
         }
+        if (userData.totalEarned !== undefined) {
+          setTotalEarned(userData.totalEarned);
+          localStorage.setItem('sw_total_earned', String(userData.totalEarned));
+        }
 
         // Update task count if changed
         if (userData.taskCount !== undefined) {
@@ -182,53 +199,96 @@ const MainInner = () => {
     return () => unsubscribe();
   }, [userId, userPhone]);
 
+  const syncWalletFromFirebase = (wallet) => {
+    if (!wallet) return;
+    setBalance(wallet.walletBalance);
+    setTotalEarned(wallet.totalEarned);
+    localStorage.setItem('sw_balance', String(wallet.walletBalance));
+    localStorage.setItem('sw_total_earned', String(wallet.totalEarned));
+  };
+
   const handleTaskComplete = async (reward) => {
-    const newBal = parseFloat((balance + reward).toFixed(2));
     const newCount = completedCount + 1;
-    
-    setBalance(newBal);
     setCompletedCount(newCount);
-    
-    localStorage.setItem('sw_balance', String(newBal));
-    
-    // Sync to Firebase
-    if (isFirebaseConfigured && userPhone) {
+
+    const identifier = userPhone || userId;
+    if (isFirebaseConfigured && identifier) {
       try {
-        await updateUserWalletBalance(userPhone, newBal);
-        await updateUserTaskCount(userPhone, newCount);
+        const wallet = await applyWalletTransaction(identifier, {
+          type: 'task_reward',
+          amount: reward,
+          meta: { source: 'task_complete' },
+        });
+        if (wallet) {
+          syncWalletFromFirebase(wallet);
+        }
+        await updateUserTaskCount(identifier, newCount);
       } catch (error) {
         console.error('Failed to sync task completion to Firebase', error);
+        const fallbackBal = parseFloat((balance + reward).toFixed(2));
+        setBalance(fallbackBal);
+        localStorage.setItem('sw_balance', String(fallbackBal));
       }
+    } else {
+      const fallbackBal = parseFloat((balance + reward).toFixed(2));
+      const fallbackEarned = parseFloat((totalEarned + reward).toFixed(2));
+      setBalance(fallbackBal);
+      setTotalEarned(fallbackEarned);
+      localStorage.setItem('sw_balance', String(fallbackBal));
+      localStorage.setItem('sw_total_earned', String(fallbackEarned));
     }
   };
 
   const handleStreakClaim = async (reward) => {
-    const newBal = parseFloat((balance + reward).toFixed(2));
-    setBalance(newBal);
-    localStorage.setItem('sw_balance', String(newBal));
-    
-    // Sync to Firebase
-    if (isFirebaseConfigured && userPhone) {
+    const identifier = userPhone || userId;
+    if (isFirebaseConfigured && identifier) {
       try {
-        await updateUserWalletBalance(userPhone, newBal);
+        const wallet = await applyWalletTransaction(identifier, {
+          type: 'streak_bonus',
+          amount: reward,
+          meta: { source: 'streak_claim' },
+        });
+        if (wallet) {
+          syncWalletFromFirebase(wallet);
+        }
       } catch (error) {
         console.error('Failed to sync streak claim to Firebase', error);
+        const fallbackBal = parseFloat((balance + reward).toFixed(2));
+        setBalance(fallbackBal);
+        localStorage.setItem('sw_balance', String(fallbackBal));
       }
+    } else {
+      const fallbackBal = parseFloat((balance + reward).toFixed(2));
+      const fallbackEarned = parseFloat((totalEarned + reward).toFixed(2));
+      setBalance(fallbackBal);
+      setTotalEarned(fallbackEarned);
+      localStorage.setItem('sw_balance', String(fallbackBal));
+      localStorage.setItem('sw_total_earned', String(fallbackEarned));
     }
   };
 
   const handleWithdraw = async (amount) => {
-    const newBal = parseFloat(Math.max(balance - amount, 0).toFixed(2));
-    setBalance(newBal);
-    localStorage.setItem('sw_balance', String(newBal));
-    
-    // Sync to Firebase
-    if (isFirebaseConfigured && userPhone) {
+    const identifier = userPhone || userId;
+    if (isFirebaseConfigured && identifier) {
       try {
-        await updateUserWalletBalance(userPhone, newBal);
+        const wallet = await applyWalletTransaction(identifier, {
+          type: 'withdrawal',
+          amount,
+          meta: { source: 'withdraw' },
+        });
+        if (wallet) {
+          syncWalletFromFirebase(wallet);
+        }
       } catch (error) {
         console.error('Failed to sync withdrawal to Firebase', error);
+        const fallbackBal = parseFloat(Math.max(balance - amount, 0).toFixed(2));
+        setBalance(fallbackBal);
+        localStorage.setItem('sw_balance', String(fallbackBal));
       }
+    } else {
+      const fallbackBal = parseFloat(Math.max(balance - amount, 0).toFixed(2));
+      setBalance(fallbackBal);
+      localStorage.setItem('sw_balance', String(fallbackBal));
     }
   };
 
@@ -339,12 +399,12 @@ const MainInner = () => {
 
     if (activeTop === 'Daily Task') return <TaskTab userName={userName} isPro={isPro} onUpgrade={handleUpgrade} onTaskComplete={handleTaskComplete} onNavigateToPayment={handleNavigateToPayment} proPriceAmount={proPriceAmount} />;
     if (activeTop === 'Billings') return <BillingsTab isPro={isPro} onUpgrade={handleUpgrade} onDowngrade={handleDowngrade} onNavigateToPayment={handleNavigateToPayment} proPriceAmount={proPriceAmount} />;
-    if (activeTop === 'Analytics') return <AnalyticsTab isPro={isPro} completedCount={completedCount} proPriceAmount={proPriceAmount} />;
-    if (activeTop === 'Achievements') return <AchievementsTab isPro={isPro} />;
+    if (activeTop === 'Analytics') return <AnalyticsTab isPro={isPro} completedCount={completedCount} proPriceAmount={proPriceAmount} totalEarned={totalEarned} walletBalance={balance} />;
+    if (activeTop === 'Achievements') return <AchievementsTab isPro={isPro} totalEarned={totalEarned} walletBalance={balance} />;
 
     return (
       <HomeTab
-        userName={userName} isPro={isPro} balance={balance} completedCount={completedCount}
+        userName={userName} isPro={isPro} balance={balance} totalEarned={totalEarned} completedCount={completedCount}
         onStartWork={() => { setActiveBottom('task'); setActiveTop('Daily Task'); }}
         onWithdraw={() => setShowWithdraw(true)}
         onStreakClaim={handleStreakClaim}

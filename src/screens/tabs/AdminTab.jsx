@@ -63,7 +63,6 @@ const AdminTab = () => {
     try {
       await updateUserPremiumStatus(editingUser, editData.isPremium);
       await updateUserTaskCount(editingUser, editData.taskCount);
-      await updateUserWalletBalance(editingUser, editData.walletBalance);
       await updateUserBlockStatus(editingUser, editData.blocked, editData.blockReason);
 
       setUsers(users.map(user =>
@@ -224,14 +223,9 @@ const AdminTab = () => {
                     style={{ width: '80px', padding: '4px', borderRadius: '4px', border: '1px solid var(--border-color)' }}
                   />
                 </div>
-                <div>
-                  <input
-                    type="number"
-                    step="0.01"
-                    value={editData.walletBalance}
-                    onChange={(e) => setEditData({...editData, walletBalance: parseFloat(e.target.value) || 0})}
-                    style={{ width: '80px', padding: '4px', borderRadius: '4px', border: '1px solid var(--border-color)' }}
-                  />
+                <div style={{ fontSize: '12px' }}>
+                  <div>₹{(editData.walletBalance || 0).toFixed(2)}</div>
+                  <div style={{ color: 'var(--text-muted)', fontSize: '10px' }}>read-only</div>
                 </div>
                 <div style={{ display: 'flex', gap: '8px' }}>
                   <button 
@@ -282,7 +276,10 @@ const AdminTab = () => {
                   </span>
                 </div>
                 <div>{user.taskCount || 0}</div>
-                <div>₹{user.walletBalance || 0}</div>
+                <div>
+                  <div>₹{Number(user.walletBalance || 0).toFixed(2)}</div>
+                  <div style={{ fontSize: '10px', color: 'var(--text-muted)' }}>earned ₹{Number(user.totalEarned || 0).toFixed(2)}</div>
+                </div>
                 <div>
                   <span style={{
                     padding: '4px 8px',

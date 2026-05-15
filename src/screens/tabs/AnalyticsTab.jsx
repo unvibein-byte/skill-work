@@ -143,9 +143,10 @@ const BarChart = ({ data, labelKey, valueKey, color, accentIdx = -1 }) => {
 };
 
 /* ─── Main Component ─────────────────────────────────────────────────────── */
-const AnalyticsTab = ({ isPro, proPriceAmount = DEFAULT_PRO_PRICING.amount }) => {
+const AnalyticsTab = ({ isPro, proPriceAmount = DEFAULT_PRO_PRICING.amount, totalEarned: firebaseEarned = 0, walletBalance = 0 }) => {
   const [period, setPeriod] = useState('week');
-  const { all, weekly, monthly, categories, heatmap, streak, totalEarned, totalTasks, todayTasks, todayEarn, avgPerTask, bestDay } = useStats();
+  const { all, weekly, monthly, categories, heatmap, streak, totalEarned: localEarned, totalTasks, todayTasks, todayEarn, avgPerTask, bestDay } = useStats();
+  const totalEarned = Math.max(Number(firebaseEarned) || 0, localEarned);
 
   const maxHeat = Math.max(...heatmap, 1);
 
@@ -188,7 +189,8 @@ const AnalyticsTab = ({ isPro, proPriceAmount = DEFAULT_PRO_PRICING.amount }) =>
             <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12, marginBottom:16 }}>
               {[
                 { icon:'✅', label:'Total Tasks',   value: totalTasks,               sub:'All time',       accent:'var(--green)' },
-                { icon:'💰', label:'Total Earned',  value:`₹${totalEarned.toLocaleString('en-IN')}`, sub:'All time', accent:'#4361ee' },
+                { icon:'💰', label:'Total Earned',  value:`₹${totalEarned.toLocaleString('en-IN')}`, sub:'Lifetime', accent:'#4361ee' },
+                { icon:'💼', label:'Wallet',        value:`₹${Number(walletBalance).toLocaleString('en-IN')}`, sub:'Available', accent:'#7F56D9' },
                 { icon:'🔥', label:'Streak',        value:`${streak}d`,              sub:'Consecutive days', accent:'#ef4444'    },
                 { icon:'🏆', label:'Best Day',      value:`₹${bestDay.earn.toLocaleString()}`, sub: bestDay.day || '—', accent:'#f59e0b' },
               ].map((s, i) => (

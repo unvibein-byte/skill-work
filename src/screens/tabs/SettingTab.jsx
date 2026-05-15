@@ -99,6 +99,7 @@ const SettingTab = ({ userName, isPro, onUpgrade, onDowngrade }) => {
 
   // ── user detail state ──
   const [walletBalance, setWalletBalance] = useState(() => Number(localStorage.getItem('sw_balance') || 0));
+  const [totalEarned, setTotalEarned] = useState(() => Number(localStorage.getItem('sw_total_earned') || 0));
   const [premiumEnabled, setPremiumEnabled] = useState(() => {
     const v = localStorage.getItem('sw_premium_enabled');
     return v === null ? true : v === 'true';
@@ -187,6 +188,10 @@ const SettingTab = ({ userName, isPro, onUpgrade, onDowngrade }) => {
         const profile = await getUserProfile(userPhone);
         if (profile) {
           if (typeof profile.walletBalance === 'number') setWalletBalance(profile.walletBalance);
+          if (typeof profile.totalEarned === 'number') {
+            setTotalEarned(profile.totalEarned);
+            localStorage.setItem('sw_total_earned', String(profile.totalEarned));
+          }
           if (typeof profile.premiumEnabled === 'boolean') setPremiumEnabled(profile.premiumEnabled);
           if (profile.kycFeePaid === true) setKycFeePaid(true);
           applyKycFromProfile(profile);
@@ -196,6 +201,10 @@ const SettingTab = ({ userName, isPro, onUpgrade, onDowngrade }) => {
         const profile = await getUserProfile(userId);
         if (profile) {
           if (typeof profile.walletBalance === 'number') setWalletBalance(profile.walletBalance);
+          if (typeof profile.totalEarned === 'number') {
+            setTotalEarned(profile.totalEarned);
+            localStorage.setItem('sw_total_earned', String(profile.totalEarned));
+          }
           if (typeof profile.premiumEnabled === 'boolean') setPremiumEnabled(profile.premiumEnabled);
           if (profile.kycFeePaid === true) setKycFeePaid(true);
           applyKycFromProfile(profile);
@@ -279,21 +288,6 @@ const SettingTab = ({ userName, isPro, onUpgrade, onDowngrade }) => {
   };
 
   const toggle = (key, val, setter) => { setter(val); localStorage.setItem(key, String(val)); };
-
-  const setWallet = async (value) => {
-    const parsed = Number(value) || 0;
-    setWalletBalance(parsed);
-    localStorage.setItem('sw_balance', String(parsed));
-    const userPhone = localStorage.getItem('sw_phone') || phone;
-    const userId = localStorage.getItem('sw_userId');
-    
-    // Update by phone number (primary), fallback to userId
-    if (userPhone) {
-      await updateUserProfile(userPhone, { walletBalance: parsed });
-    } else if (userId) {
-      await updateUserProfile(userId, { walletBalance: parsed });
-    }
-  };
 
   const setPremiumEnabledState = async (value) => {
     setPremiumEnabled(value);
@@ -938,10 +932,6 @@ const SettingTab = ({ userName, isPro, onUpgrade, onDowngrade }) => {
     }
   };
 
-  const totalEarned = (() => {
-    try { return JSON.parse(localStorage.getItem('sw_completed') || '[]').reduce((s, t) => s + t.reward, 0); }
-    catch { return 0; }
-  })();
   const tasksDone = (() => {
     try { return JSON.parse(localStorage.getItem('sw_completed') || '[]').length; }
     catch { return 0; }
@@ -997,7 +987,7 @@ const SettingTab = ({ userName, isPro, onUpgrade, onDowngrade }) => {
           <Section label={t('account')} />
           <MenuItem icon="👤" label={t('edit_profile')}  sub={name || userName}           onClick={() => setSheet('profile')}  accent="#4361ee" />
           <MenuItem icon="🏦" label={t('bank_upi')}     sub={upi || 'Not set'}           onClick={() => setSheet('bank')}     accent="#027A48" />
-          <MenuItem icon="🧾" label="User Details" sub={`Wallet ₹${walletBalance.toFixed(2)}`} onClick={() => setSheet('userDetails')} accent="#7F56D9" />
+          <MenuItem icon="🧾" label="User Details" sub={`Wallet ₹${walletBalance.toFixed(2)} · Earned ₹${totalEarned.toFixed(2)}`} onClick={() => setSheet('userDetails')} accent="#7F56D9" />
           <MenuItem icon="🔒" label={t('change_password')} sub="Update your login password" onClick={() => setSheet('password')} accent="#7F56D9" />
           <MenuItem
             icon="📱"
@@ -1309,7 +1299,7 @@ const SettingTab = ({ userName, isPro, onUpgrade, onDowngrade }) => {
             <div style={{ fontSize:48, marginBottom:12 }}>👤</div>
             <h4 style={{ fontSize:16, fontWeight:800, marginBottom:8, fontFamily:'var(--font-display)' }}>Account Settings</h4>
             <p style={{ fontSize:13, color:'var(--text-secondary)', lineHeight:1.7, marginBottom:20 }}>
-              Manage your wallet balance and control whether premium upgrades are allowed.
+              Wallet updates automatically from tasks and withdrawals. Premium toggle is below.
             </p>
             <div style={{ textAlign:'left', fontSize:12, color:'var(--text-muted)', marginBottom:16, background:'rgba(0,0,0,0.04)', padding:12, borderRadius:12 }}>
               <div><strong>User ID:</strong> {localStorage.getItem('sw_userId') || 'Not logged in'}</div>
@@ -1317,21 +1307,15 @@ const SettingTab = ({ userName, isPro, onUpgrade, onDowngrade }) => {
               <div><strong>Phone:</strong> {phone || 'Not set'}</div>
             </div>
 
-            <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:14 }}>
-              <div style={{ flex:1 }}>
-                <div style={{ fontSize:12, fontWeight:700, marginBottom:4 }}>Wallet Balance</div>
-                <input
-                  type="number"
-                  value={walletBalance}
-                  onChange={e => setWallet(Number(e.target.value))}
-                  style={{ width:'100%', padding:'10px', borderRadius:10, border:'1px solid var(--border-color)', fontSize:14 }}
-                />
+            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10, marginBottom:14 }}>
+              <div style={{ padding:'12px 14px', borderRadius:12, background:'var(--green-light)', border:'1px solid var(--green-border)' }}>
+                <div style={{ fontSize:11, fontWeight:700, color:'var(--text-muted)', marginBottom:4 }}>Wallet (available)</div>
+                <div style={{ fontSize:20, fontWeight:900, color:'var(--green)', fontFamily:'var(--font-display)' }}>₹{walletBalance.toFixed(2)}</div>
               </div>
-              <button
-                onClick={() => { setWallet(walletBalance); showToast('✅ Wallet updated'); }}
-                style={{ padding:'10px 14px', borderRadius:12, background:'var(--green-light)', border:'1px solid var(--green-border)', fontWeight:700, fontSize:12, cursor:'pointer' }}>
-                Save
-              </button>
+              <div style={{ padding:'12px 14px', borderRadius:12, background:'rgba(67,97,238,0.08)', border:'1px solid rgba(67,97,238,0.2)' }}>
+                <div style={{ fontSize:11, fontWeight:700, color:'var(--text-muted)', marginBottom:4 }}>Total earned</div>
+                <div style={{ fontSize:20, fontWeight:900, color:'#4361ee', fontFamily:'var(--font-display)' }}>₹{totalEarned.toFixed(2)}</div>
+              </div>
             </div>
 
             <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'12px 14px', borderRadius:12, background:'rgba(127,86,217,0.08)', marginBottom:16 }}>

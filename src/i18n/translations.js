@@ -11,6 +11,7 @@ const translations = {
     // ── HomeTab ──
     total_balance: 'Total Balance',
     inr_updated: 'INR · Updated just now',
+    lifetime_earned: 'Lifetime earned',
     start_work: '⭐ Start Work',
     withdraw: '💳 Withdraw',
     earnings: 'Earnings',
@@ -196,6 +197,7 @@ const translations = {
     // ── HomeTab ──
     total_balance: 'कुल बैलेंस',
     inr_updated: 'INR · अभी अपडेट हुआ',
+    lifetime_earned: 'कुल कमाई',
     start_work: '⭐ काम शुरू करें',
     withdraw: '💳 निकासी',
     earnings: 'कमाई',

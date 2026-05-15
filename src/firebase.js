@@ -19,6 +19,7 @@ import {
   getDocs,
   deleteDoc,
   limit,
+  runTransaction,
 } from 'firebase/firestore';
 
 const defaultFirebaseConfig = {
@@ -296,6 +297,8 @@ export async function saveUserProfile(uid, data) {
     payload.isPremium = false;
     payload.taskCount = 0;
     payload.walletBalance = 0;
+    payload.totalEarned = 0;
+    payload.totalWithdrawn = 0;
     payload.blocked = false;
     payload.status = USER_STATUS_ACTIVE;
     if (data.deviceId) {
@@ -1527,8 +1530,77 @@ export async function updateUserTaskCount(identifier, taskCount) {
 }
 
 /**
- * Update user wallet balance
+ * Apply a wallet change atomically (Firestore source of truth).
+ * @param {string} identifier phone or uid
+ * @param {{ type: 'task_reward'|'streak_bonus'|'withdrawal', amount: number, meta?: object }} tx
+ *   amount: positive for credits, positive for withdrawal (deducted internally)
  */
+export async function applyWalletTransaction(identifier, { type, amount, meta = {} }) {
+  if (!isFirebaseConfigured || !db) {
+    return null;
+  }
+
+  const delta = Number(amount);
+  if (!Number.isFinite(delta) || delta === 0) {
+    return null;
+  }
+
+  try {
+    const ref = await getUserDocRefByIdentifier(identifier);
+
+    const result = await runTransaction(db, async (transaction) => {
+      const snap = await transaction.get(ref);
+      const data = snap.exists() ? snap.data() : {};
+      const currentBalance = Number(data.walletBalance) || 0;
+      const currentEarned = Number(data.totalEarned) || 0;
+      const currentWithdrawn = Number(data.totalWithdrawn) || 0;
+
+      let balanceDelta = delta;
+      if (type === 'withdrawal') {
+        balanceDelta = -Math.abs(delta);
+      } else if (type === 'task_reward' || type === 'streak_bonus') {
+        balanceDelta = Math.abs(delta);
+      }
+
+      const newBalance = Math.max(0, parseFloat((currentBalance + balanceDelta).toFixed(2)));
+      let newEarned = currentEarned;
+      let newWithdrawn = currentWithdrawn;
+
+      if (type === 'task_reward' || type === 'streak_bonus') {
+        newEarned = parseFloat((currentEarned + Math.abs(delta)).toFixed(2));
+      } else if (type === 'withdrawal') {
+        newWithdrawn = parseFloat((currentWithdrawn + Math.abs(delta)).toFixed(2));
+      }
+
+      const update = {
+        walletBalance: newBalance,
+        totalEarned: newEarned,
+        totalWithdrawn: newWithdrawn,
+        updatedAt: new Date().toISOString(),
+      };
+
+      transaction.set(ref, update, { merge: true });
+      return update;
+    });
+
+    const ledgerRef = doc(collection(db, 'wallet_ledger', ref.id, 'transactions'));
+    await setDoc(ledgerRef, {
+      type,
+      amount: type === 'withdrawal' ? -Math.abs(delta) : Math.abs(delta),
+      balanceAfter: result.walletBalance,
+      totalEarnedAfter: result.totalEarned,
+      createdAt: new Date().toISOString(),
+      ...meta,
+    });
+
+    return result;
+  } catch (error) {
+    console.error('Failed to apply wallet transaction', error);
+    throw error;
+  }
+}
+
+/** @deprecated Use {@link applyWalletTransaction} — direct balance overwrites are not allowed. */
 export async function updateUserWalletBalance(identifier, walletBalance) {
   if (!isFirebaseConfigured || !db) {
     return null;
@@ -1536,15 +1608,52 @@ export async function updateUserWalletBalance(identifier, walletBalance) {
 
   try {
     const ref = await getUserDocRefByIdentifier(identifier);
-    
-    await setDoc(ref, { 
-      walletBalance: walletBalance,
-      updatedAt: new Date().toISOString() 
-    }, { merge: true });
+    await setDoc(
+      ref,
+      {
+        walletBalance: Number(walletBalance) || 0,
+        updatedAt: new Date().toISOString(),
+      },
+      { merge: true }
+    );
     return true;
   } catch (error) {
     console.error('Failed to update user wallet balance', error);
     return false;
+  }
+}
+
+/** One-time backfill when `totalEarned` is missing on the user doc. */
+export async function ensureUserWalletTotals(identifier, localEarnedFallback = 0) {
+  if (!isFirebaseConfigured || !db) {
+    return null;
+  }
+
+  try {
+    const ref = await getUserDocRefByIdentifier(identifier);
+    const snap = await getDoc(ref);
+    if (!snap.exists()) {
+      return null;
+    }
+
+    const data = snap.data();
+    const patch = {};
+    if (data.totalEarned === undefined || data.totalEarned === null) {
+      const earned = Math.max(Number(data.walletBalance) || 0, Number(localEarnedFallback) || 0);
+      patch.totalEarned = parseFloat(earned.toFixed(2));
+    }
+    if (data.totalWithdrawn === undefined || data.totalWithdrawn === null) {
+      patch.totalWithdrawn = 0;
+    }
+    if (Object.keys(patch).length === 0) {
+      return data;
+    }
+    patch.updatedAt = new Date().toISOString();
+    await setDoc(ref, patch, { merge: true });
+    return { ...data, ...patch };
+  } catch (error) {
+    console.error('Failed to ensure user wallet totals', error);
+    return null;
   }
 }
 

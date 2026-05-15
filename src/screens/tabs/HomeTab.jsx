@@ -3,7 +3,7 @@ import { useLang } from '../../i18n/LangContext';
 import PaymentWebView from '../../components/PaymentWebView';
 import { getPaymentProofConfig } from '../../firebase';
 
-const HomeTab = ({ userName, isPro, balance = 0, completedCount = 0, onStartWork, onWithdraw, onStreakClaim }) => {
+const HomeTab = ({ userName, isPro, balance = 0, totalEarned = 0, completedCount = 0, onStartWork, onWithdraw, onStreakClaim }) => {
   const { t } = useLang();
   const [proofWebView, setProofWebView] = useState(null);
   const [proofOpening, setProofOpening] = useState(false);
@@ -110,6 +110,9 @@ const HomeTab = ({ userName, isPro, balance = 0, completedCount = 0, onStartWork
                 ₹{parseFloat(balance).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </div>
               <p style={{ fontSize: 12, color: 'rgba(255,255,255,0.4)', marginTop: 6, fontWeight: 500 }}>{t('inr_updated')}</p>
+              <p style={{ fontSize: 11, color: 'rgba(74,222,128,0.85)', marginTop: 8, fontWeight: 600 }}>
+                {t('lifetime_earned')}: ₹{parseFloat(totalEarned).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </p>
             </div>
             <div style={{ width: 52, height: 52, borderRadius: 16, background: 'rgba(0,195,126,0.15)', border: '1px solid rgba(0,195,126,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 26 }}>
               💼
