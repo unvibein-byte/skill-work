@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import AppLogo from '../../components/AppLogo';
 
 /* ─── Rarity config ──────────────────────────────────────────────────────── */
 const RARITY = {
@@ -106,10 +107,10 @@ const BadgeCard = ({ badge, isNew }) => {
 };
 
 /* ─── Main AchievementsTab ───────────────────────────────────────────────── */
-const AchievementsTab = ({ isPro }) => {
+const AchievementsTab = ({ isPro, totalEarned = 0, walletBalance = 0 }) => {
   // ── Real stats from localStorage ──
   const completed = (() => { try { return JSON.parse(localStorage.getItem('sw_completed') || '[]'); } catch { return []; } })();
-  const balance = parseFloat(localStorage.getItem('sw_balance') || '0');
+  const earnedForAchievements = Math.max(Number(totalEarned) || 0, parseFloat(localStorage.getItem('sw_total_earned') || '0'));
   const team = (() => { try { return JSON.parse(localStorage.getItem('sw_team') || '[]'); } catch { return []; } })();
 
   // Streak calc
@@ -128,7 +129,7 @@ const AchievementsTab = ({ isPro }) => {
     daysActive = Math.max(1, Math.floor((Date.now() - new Date(earliest).getTime()) / 86400000) + 1);
   }
 
-  const stats = { tasks: completed.length, balance, streak, teamSize: team.length, daysActive };
+  const stats = { tasks: completed.length, balance: earnedForAchievements, streak, teamSize: team.length, daysActive };
   const achievements = buildAchievements(stats);
 
   // Track previously-seen unlocked IDs to show NEW ribbon
@@ -162,7 +163,10 @@ const AchievementsTab = ({ isPro }) => {
         <div style={{ position: 'absolute', bottom: -30, left: -20, width: 100, height: 100, borderRadius: '50%', background: 'rgba(127,86,217,0.2)' }} />
 
         <div style={{ position: 'relative', zIndex: 1 }}>
-          <p style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '1px', marginBottom: 6 }}>Your Progress</p>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
+            <AppLogo size={36} rounded={10} />
+            <p style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '1px', margin: 0 }}>Your Progress</p>
+          </div>
           <h2 style={{ fontSize: 22, fontWeight: 900, color: 'white', fontFamily: 'var(--font-display)', marginBottom: 18 }}>🏆 Achievements</h2>
 
           {/* Overall progress ring simulation */}
@@ -193,7 +197,7 @@ const AchievementsTab = ({ isPro }) => {
             {[
               { label: 'Tasks', val: stats.tasks, color: '#7F56D9' },
               { label: 'Streak', val: `${streak}d`, color: '#ef4444' },
-              { label: 'Earned', val: `₹${Math.floor(balance)}`, color: 'var(--green)' },
+              { label: 'Earned', val: `₹${Math.floor(stats.balance)}`, color: 'var(--green)' },
               { label: 'Team', val: team.length, color: '#2563eb' },
             ].map((s, i) => (
               <div key={i} style={{ padding: '13px 8px', textAlign: 'center', borderRight: i < 3 ? '1px solid var(--border-color)' : 'none' }}>
@@ -264,7 +268,7 @@ const AchievementsTab = ({ isPro }) => {
               All Achieved!
             </div>
             <div style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.7 }}>
-              Legendary status unlocked. You are a SkillWork Master! 🌟
+              Legendary status unlocked. You are a 24hrwork Master! 🌟
             </div>
           </div>
         )}

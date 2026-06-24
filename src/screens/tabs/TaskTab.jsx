@@ -1,19 +1,24 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { DEFAULT_PRO_PRICING, getHowToWorkConfig, isDirectVideoUrl } from '../../firebase';
+import PaymentWebView from '../../components/PaymentWebView';
+import TaskDetails from '../TaskDetails';
+import AppLogo from '../../components/AppLogo';
+import { resolveTaskReward } from '../../utils/dummyTasks';
 
 // ─── Task Data ────────────────────────────────────────────────────────────────
 const TEMPLATES = [
   {
-    name: 'Document Digitization', emoji: '📄', category: 'Basic',
+    name: 'Document Digitization', emoji: '📄', category: 'Basic', difficulty: 'Easy',
     banner: 'linear-gradient(135deg,#7F56D9 0%,#9B72EF 100%)',
     accentColor: '#7F56D9', bgLight: 'rgba(127,86,217,0.08)',
-    reward: 100, avgTime: '15 mins',
+    reward: 105, avgTime: '15 mins',
     tagline: 'Convert scanned images into editable PDF format.',
     description: 'You will be given a scanned document. Type out the content into a clean, well-formatted PDF and upload it back.',
     pdfUrl: '/pdfs/task-digitization.pdf',
     steps: ['Download the scanned document PDF below','Open in Adobe Acrobat, Smallpdf, or ILovePDF','Type out the content with correct formatting','Export as PDF and upload your edited file'],
   },
   {
-    name: 'Legal Watermarking', emoji: '⚖️', category: 'Legal',
+    name: 'Legal Watermarking', emoji: '⚖️', category: 'Legal', difficulty: 'Easy',
     banner: 'linear-gradient(135deg,#027A48 0%,#12B76A 100%)',
     accentColor: '#027A48', bgLight: 'rgba(2,122,72,0.08)',
     reward: 150, avgTime: '10 mins',
@@ -23,80 +28,80 @@ const TEMPLATES = [
     steps: ['Download the contract PDF below','Open in any editor that supports watermarking (Smallpdf, PDF24)','Add diagonal semi-transparent "CONFIDENTIAL" text watermark','Export and upload the watermarked PDF'],
   },
   {
-    name: 'Invoice Correction', emoji: '🧾', category: 'Finance',
+    name: 'Invoice Correction', emoji: '🧾', category: 'Finance', difficulty: 'Easy',
     banner: 'linear-gradient(135deg,#B54708 0%,#F79009 100%)',
     accentColor: '#B54708', bgLight: 'rgba(181,71,8,0.08)',
-    reward: 120, avgTime: '20 mins',
+    reward: 180, avgTime: '20 mins',
     tagline: 'Fix misaligned text and data errors in tax invoices.',
     description: `Download the invoice PDF. Correct all misaligned columns, fix totals, and ensure GST details are properly spaced. Re-upload the corrected file.`,
     pdfUrl: '/pdfs/task-invoice.pdf',
     steps: ['Download the invoice PDF below','Open in a PDF editor and identify all alignment errors','Fix column widths, row heights, and totals','Export corrected PDF and upload below'],
   },
   {
-    name: 'Resume Formatting', emoji: '📝', category: 'Career',
+    name: 'Resume Formatting', emoji: '📝', category: 'Career', difficulty: 'Easy',
     banner: 'linear-gradient(135deg,#175CD3 0%,#2E90FA 100%)',
     accentColor: '#175CD3', bgLight: 'rgba(23,92,211,0.08)',
-    reward: 130, avgTime: '25 mins',
+    reward: 200, avgTime: '25 mins',
     tagline: 'Polish layouts, margins and fonts for resumes.',
     description: `Download the resume PDF. Fix fonts to Inter/Arial 11pt, set 1-inch margins, bold section headings, and align bullet points. Re-upload.`,
     pdfUrl: '/pdfs/task-resume.pdf',
     steps: ['Download the resume PDF below','Set fonts to Inter/Arial 11pt, margins 1 inch all sides','Ensure headings are bold and bullets are aligned','Export as PDF and upload the polished version'],
   },
   {
-    name: 'Medical Redaction', emoji: '🏥', category: 'Medical',
+    name: 'Medical Redaction', emoji: '🏥', category: 'Medical', difficulty: 'Hard',
     banner: 'linear-gradient(135deg,#C11574 0%,#EE46BC 100%)',
     accentColor: '#C11574', bgLight: 'rgba(193,21,116,0.08)',
-    reward: 200, avgTime: '30 mins',
+    reward: 550, avgTime: '30 mins',
     tagline: 'Redact sensitive patient info from medical reports.',
     description: `Download the medical report PDF. Black-out all personally identifiable information using solid black rectangles. Ensure no PII is visible and re-upload.`,
     pdfUrl: '/pdfs/task-medical.pdf',
     steps: ['Download the medical report PDF below','Identify all PII: name, DOB, ID numbers, address','Apply solid black redaction blocks over each PII field','Export and upload — confirm no PII visible'],
   },
   {
-    name: 'Signature Page Setup', emoji: '✍️', category: 'Legal',
+    name: 'Signature Page Setup', emoji: '✍️', category: 'Legal', difficulty: 'Easy',
     banner: 'linear-gradient(135deg,#344054 0%,#667085 100%)',
     accentColor: '#344054', bgLight: 'rgba(52,64,84,0.08)',
-    reward: 110, avgTime: '12 mins',
+    reward: 120, avgTime: '12 mins',
     tagline: 'Add signature placeholders to contract PDFs.',
     description: 'Download the contract PDF and add properly formatted signature blocks on the last page as per instructions. Re-upload.',
     pdfUrl: '/pdfs/task-signature.pdf',
     steps: ['Download the contract PDF below','Locate or add a signature section on the last page','Insert formatted signature placeholder blocks for both parties','Export and upload the updated PDF'],
   },
   {
-    name: 'Brochure Layout Fix', emoji: '🖼️', category: 'Design',
+    name: 'Brochure Layout Fix', emoji: '🖼️', category: 'Design', difficulty: 'Medium',
     banner: 'linear-gradient(135deg,#D92D8A 0%,#F97066 100%)',
     accentColor: '#D92D8A', bgLight: 'rgba(217,45,138,0.08)',
-    reward: 160, avgTime: '20 mins',
+    reward: 300, avgTime: '20 mins',
     tagline: 'Fix overlapping text and images in brochure PDFs.',
     description: 'Download the brochure PDF. Reposition any overlapping images and text boxes so nothing overlaps. Re-upload the corrected file.',
     pdfUrl: '/pdfs/task-brochure.pdf',
     steps: ['Download the brochure PDF below','Open in PDF editor and identify overlapping regions','Adjust element positions so nothing overlaps','Export and upload the corrected brochure'],
   },
   {
-    name: 'Table Extraction', emoji: '📊', category: 'Finance',
+    name: 'Table Extraction', emoji: '📊', category: 'Finance', difficulty: 'Medium',
     banner: 'linear-gradient(135deg,#0086C9 0%,#36BFFA 100%)',
     accentColor: '#0086C9', bgLight: 'rgba(0,134,201,0.08)',
-    reward: 140, avgTime: '18 mins',
+    reward: 260, avgTime: '18 mins',
     tagline: 'Extract and reformat table data from scanned PDFs.',
     description: 'Download the scanned PDF containing tables. Recreate each table in a new structured PDF with proper alignment and borders.',
     pdfUrl: '/pdfs/task-table.pdf',
     steps: ['Download the scanned PDF below','Identify all tables and their data','Recreate tables with proper borders and alignment in a PDF editor','Upload the re-created structured PDF'],
   },
   {
-    name: 'Certificate Generation', emoji: '🏆', category: 'Basic',
+    name: 'Certificate Generation', emoji: '🏆', category: 'Basic', difficulty: 'Easy',
     banner: 'linear-gradient(135deg,#DC6803 0%,#FDB022 100%)',
     accentColor: '#DC6803', bgLight: 'rgba(220,104,3,0.08)',
-    reward: 90, avgTime: '10 mins',
+    reward: 120, avgTime: '10 mins',
     tagline: 'Fill in names and details on certificate templates.',
     description: 'Download the certificate template PDF. Fill in the provided name and details using a PDF editor. Export and upload.',
     pdfUrl: '/pdfs/task-certificate.pdf',
     steps: ['Download the certificate template PDF below','Fill in the name and details as required','Ensure font and alignment match the template style','Export and upload the completed certificate'],
   },
   {
-    name: 'Form Completion', emoji: '📋', category: 'Basic',
+    name: 'Form Completion', emoji: '📋', category: 'Basic', difficulty: 'Easy',
     banner: 'linear-gradient(135deg,#099250 0%,#3CCB7F 100%)',
     accentColor: '#099250', bgLight: 'rgba(9,146,80,0.08)',
-    reward: 80, avgTime: '8 mins',
+    reward: 105, avgTime: '8 mins',
     tagline: 'Fill out standard form templates with provided data.',
     description: 'Download the blank form PDF. Fill in all fields with the sample data provided in the task description. Upload the completed form.',
     pdfUrl: '/pdfs/task-form.pdf',
@@ -110,7 +115,14 @@ const PRO_LIMIT  = 50;
 const TASKS = Array.from({ length: PRO_LIMIT }, (_, i) => {
   const t = TEMPLATES[i % TEMPLATES.length];
   const v = Math.floor(i / TEMPLATES.length) + 1;
-  return { ...t, id: i + 1, likes: (i * 7 + 3) % 22 + 1, name: v > 1 ? `${t.name} (Part ${v})` : t.name, reward: t.reward + (v - 1) * 10 };
+  const baseReward = t.reward + (v - 1) * 10;
+  return {
+    ...t,
+    id: i + 1,
+    likes: (i * 7 + 3) % 22 + 1,
+    name: v > 1 ? `${t.name} (Part ${v})` : t.name,
+    reward: resolveTaskReward(baseReward, t.difficulty || 'Easy'),
+  };
 });
 
 const CATEGORY_COLORS = {
@@ -118,12 +130,94 @@ const CATEGORY_COLORS = {
   Career: '#175CD3', Medical: '#C11574', Design: '#D92D8A',
 };
 
+const HOW_TO_STEPS = [
+  { label: 'Pick Task', icon: '📋' },
+  { label: 'Choose Mode', icon: '📝' },
+  { label: 'Complete Task', icon: '✅' },
+];
+
+// ─── How To Work Modal ────────────────────────────────────────────────────────
+const HowToWorkModal = ({ onClose, config, isPro, onOpenPage }) => {
+  const hasVideo = Boolean(config?.videoUrl);
+  const hasPage = Boolean(config?.pageUrl);
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ paddingBottom: 28, maxHeight: '90vh', overflowY: 'auto' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+          <h3 style={{ fontSize: 18, fontWeight: 800, fontFamily: 'var(--font-display)', margin: 0 }}>
+            {config?.pageTitle || 'How To Work'}
+          </h3>
+          <button onClick={onClose} style={{ border: 'none', background: 'transparent', color: 'var(--text-secondary)', fontSize: 22, cursor: 'pointer', lineHeight: 1 }}>✕</button>
+        </div>
+
+        <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
+          {HOW_TO_STEPS.map((s, i) => (
+            <div key={i} style={{ flex: 1, background: '#f8f9fc', borderRadius: 12, padding: '10px 6px', textAlign: 'center', border: '1px solid var(--border-color)' }}>
+              <div style={{ fontSize: 20, marginBottom: 4 }}>{s.icon}</div>
+              <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-secondary)' }}>{s.label}</div>
+            </div>
+          ))}
+        </div>
+
+        {hasVideo && (
+          <div style={{ background: '#f8f9fc', padding: 10, borderRadius: 16, border: '1px solid var(--border-color)', marginBottom: 14 }}>
+            <div style={{ position: 'relative', width: '100%', paddingTop: '56.25%', borderRadius: 12, overflow: 'hidden', background: '#000' }}>
+              {isDirectVideoUrl(config.videoUrl) ? (
+                <video
+                  src={config.videoUrl}
+                  controls
+                  playsInline
+                  style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'contain' }}
+                />
+              ) : (
+                <iframe
+                  style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', border: 'none' }}
+                  src={config.videoUrl}
+                  title={config.pageTitle || 'How To Work'}
+                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                  allowFullScreen
+                />
+              )}
+            </div>
+          </div>
+        )}
+
+        {hasPage && (
+          <button
+            type="button"
+            className="btn-blue"
+            style={{ marginBottom: 12 }}
+            onClick={() => onOpenPage(config.pageUrl, config.pageTitle)}
+          >
+            📖 Open Tutorial Guide
+          </button>
+        )}
+
+        {!hasVideo && !hasPage && (
+          <p style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.6, marginBottom: 14 }}>
+            Tutorial video is not configured yet. Add <strong>videoUrl</strong> or <strong>pageUrl</strong> in Firebase → config/how_to_work.
+          </p>
+        )}
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, background: 'var(--green-light)', borderRadius: 12, padding: '12px 14px', border: '1px solid var(--green-border)' }}>
+          <span style={{ fontSize: 24 }}>🪙</span>
+          <div>
+            <div style={{ fontSize: 15, fontWeight: 800, color: 'var(--text-primary)', fontFamily: 'var(--font-display)' }}>₹100 Per Work</div>
+            <div style={{ fontSize: 11, color: 'var(--text-secondary)' }}>Earn up to ₹{isPro ? '5,000' : '1,500'} daily</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 // ─── Upgrade Modal ────────────────────────────────────────────────────────────
-const UpgradeModal = ({ onClose, onUpgrade, onNavigateToPayment }) => {
+const UpgradeModal = ({ onClose, onUpgrade, onNavigateToPayment, proPriceAmount }) => {
   const handleUpgradeClick = async () => {
     const success = await onUpgrade();
     if (!success) {
-      // If upgrade failed (no payment), show message and navigate to payment
+      onClose();
       onNavigateToPayment();
     } else {
       onClose();
@@ -160,244 +254,12 @@ const UpgradeModal = ({ onClose, onUpgrade, onNavigateToPayment }) => {
           </div>
 
           <button onClick={handleUpgradeClick} className="btn-purple" style={{ marginBottom: 10 }}>
-            👑 Upgrade Now — ₹399 Lifetime
+            👑 Upgrade Now — ₹{proPriceAmount} Lifetime
           </button>
           <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', fontSize: 14, cursor: 'pointer', fontFamily: 'var(--font-sans)', width: '100%', padding: '8px' }}>
             Maybe Later
           </button>
         </div>
-      </div>
-    </div>
-  );
-};
-
-// ─── Task Detail Modal ────────────────────────────────────────────────────────
-const TaskDetailModal = ({ task, onClose, onTaskComplete }) => {
-  const [phase,      setPhase]      = useState('info'); // info|downloaded|uploading|done
-  const [uploadedFile, setUploadedFile] = useState(null);
-  const [fileError,    setFileError]    = useState('');
-
-  // Persist completed task to localStorage
-  const saveCompletion = () => {
-    const prev = JSON.parse(localStorage.getItem('sw_completed') || '[]');
-    prev.push({
-      id:       task.id,
-      name:     task.name,
-      category: task.category,
-      reward:   task.reward,
-      date:     new Date().toISOString().slice(0, 10),
-      ts:       Date.now(),
-      uploadedFile: uploadedFile ? { name: uploadedFile.name, size: uploadedFile.size } : null,
-    });
-    localStorage.setItem('sw_completed', JSON.stringify(prev));
-    // Mark this task ID as permanently done (lock it)
-    const done = JSON.parse(localStorage.getItem('sw_done_ids') || '[]');
-    if (!done.includes(task.id)) done.push(task.id);
-    localStorage.setItem('sw_done_ids', JSON.stringify(done));
-    const bal = parseFloat(localStorage.getItem('sw_balance') || '0');
-    localStorage.setItem('sw_balance', (bal + task.reward).toFixed(2));
-  };
-
-  // Real download: create link and click it
-  const handleDownload = () => {
-    const link = document.createElement('a');
-    link.href = task.pdfUrl || '/pdfs/task-sample.pdf';
-    const fileName = task.name.replace(/\s+/g, '-').toLowerCase() + '.pdf';
-    link.download = fileName;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    setPhase('downloaded');
-  };
-
-  // Real file input handler
-  const handleFileSelect = (e) => {
-    const file = e.target.files?.[0];
-    setFileError('');
-    setUploadedFile(null);
-    if (!file) return;
-    if (file.type !== 'application/pdf' && !file.name.endsWith('.pdf')) {
-      setFileError('❌ Only PDF files are accepted. Please select a .pdf file.');
-      return;
-    }
-    if (file.size > 20 * 1024 * 1024) {
-      setFileError('❌ File too large. Maximum size is 20 MB.');
-      return;
-    }
-    setUploadedFile(file);
-  };
-
-  // Submit with real file
-  const handleSubmit = () => {
-    if (!uploadedFile) { setFileError('❌ Please select your edited PDF first.'); return; }
-    setPhase('uploading');
-    // Simulate upload (replace with real API call here)
-    setTimeout(() => {
-      saveCompletion();
-      if (onTaskComplete) onTaskComplete(task.reward);
-      setPhase('done');
-    }, 2200);
-  };
-
-  return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div className="modal-content" onClick={e => e.stopPropagation()} style={{ paddingBottom: 36 }}>
-
-        {/* Close button */}
-        <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 12 }}>
-          <button onClick={onClose} style={{ width: 30, height: 30, borderRadius: '50%', background: '#f0f2f8', border: 'none', cursor: 'pointer', fontSize: 14, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, color: 'var(--text-secondary)' }}>✕</button>
-        </div>
-
-        {/* Hero banner */}
-        <div style={{ background: task.banner, borderRadius: 20, height: 130, display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 18, position: 'relative', overflow: 'hidden' }}>
-          <div style={{ position: 'absolute', right: -20, bottom: -20, width: 100, height: 100, borderRadius: '50%', background: 'rgba(255,255,255,0.1)' }} />
-          <div style={{ position: 'absolute', left: -20, top: -20, width: 80, height: 80, borderRadius: '50%', background: 'rgba(255,255,255,0.08)' }} />
-          <div style={{ textAlign: 'center', position: 'relative', zIndex: 1 }}>
-            <div style={{ fontSize: 52, marginBottom: 4 }}>{task.emoji}</div>
-            <div style={{ background: 'rgba(0,0,0,0.25)', borderRadius: 100, padding: '3px 12px', display: 'inline-block' }}>
-              <span style={{ fontSize: 11, color: 'white', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.8px' }}>{task.category}</span>
-            </div>
-          </div>
-          {/* Reward badge */}
-          <div style={{ position: 'absolute', top: 12, right: 14, background: 'rgba(0,0,0,0.3)', backdropFilter: 'blur(6px)', borderRadius: 100, padding: '5px 14px', border: '1px solid rgba(255,255,255,0.15)' }}>
-            <span style={{ color: 'white', fontWeight: 800, fontSize: 15, fontFamily: 'var(--font-display)' }}>₹{task.reward}</span>
-          </div>
-        </div>
-
-        <h3 style={{ fontSize: 18, fontWeight: 800, marginBottom: 4, fontFamily: 'var(--font-display)' }}>{task.name}</h3>
-        <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 16, lineHeight: 1.6 }}>{task.description}</p>
-
-        {/* Info row */}
-        <div style={{ display: 'flex', gap: 10, marginBottom: 18 }}>
-          {[
-            { icon: '⏱️', label: 'Est. Time', value: `~${task.avgTime}` },
-            { icon: '💰', label: 'Reward', value: `₹${task.reward}` },
-            { icon: '👍', label: 'Likes', value: task.likes },
-          ].map((m, i) => (
-            <div key={i} style={{ flex: 1, background: '#f8f9fc', borderRadius: 12, padding: '10px 8px', textAlign: 'center', border: '1px solid var(--border-color)' }}>
-              <div style={{ fontSize: 18, marginBottom: 4 }}>{m.icon}</div>
-              <div style={{ fontSize: 13, fontWeight: 800, color: 'var(--text-primary)', fontFamily: 'var(--font-display)' }}>{m.value}</div>
-              <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 1, fontWeight: 600 }}>{m.label}</div>
-            </div>
-          ))}
-        </div>
-
-        {/* Steps */}
-        {phase !== 'done' && (
-          <div style={{ marginBottom: 18 }}>
-            <h4 style={{ fontSize: 13, fontWeight: 700, marginBottom: 12, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Steps to Complete</h4>
-            {task.steps.map((step, i) => {
-              const isDone = (phase === 'downloaded' && i === 0) || (phase === 'uploading' && i <= 1) || (uploadedFile && i <= 2);
-              return (
-                <div key={i} style={{ display: 'flex', gap: 12, alignItems: 'flex-start', marginBottom: 10 }}>
-                  <div style={{ width: 24, height: 24, borderRadius: '50%', background: isDone ? 'var(--green)' : (i === 0 ? task.accentColor+'22' : '#f0f2f8'), color: isDone ? 'white' : (i === 0 ? task.accentColor : 'var(--text-muted)'), fontSize: 10, fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, transition: 'all 0.3s', boxShadow: isDone ? 'var(--green-glow)' : 'none' }}>
-                    {isDone ? '✓' : i + 1}
-                  </div>
-                  <p style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.5 }}>{step}</p>
-                </div>
-              );
-            })}
-          </div>
-        )}
-
-        {/* ── PHASE: info — Download button ── */}
-        {phase === 'info' && (
-          <button className="btn-blue" onClick={handleDownload}>
-            ⬇️&nbsp; Download PDF File
-          </button>
-        )}
-
-        {/* ── PHASE: downloaded — Upload section ── */}
-        {(phase === 'downloaded' || phase === 'uploading') && (
-          <div>
-            {phase === 'downloaded' && (
-              <div style={{ background: 'linear-gradient(135deg,#fffbeb,#fef3c7)', border: '1px solid #fcd34d', borderRadius: 14, padding: '12px 14px', marginBottom: 14, display: 'flex', gap: 10, alignItems: 'center' }}>
-                <span style={{ fontSize: 22 }}>✅</span>
-                <div>
-                  <div style={{ fontSize: 13, fontWeight: 700, color: '#78350f' }}>PDF Downloaded!</div>
-                  <div style={{ fontSize: 12, color: '#92400e', marginTop: 1 }}>Edit it, then select your edited file below to upload.</div>
-                </div>
-              </div>
-            )}
-
-            {/* File picker */}
-            {phase === 'downloaded' && (
-              <div>
-                <label htmlFor="pdf-upload" style={{
-                  display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-                  border: `2px dashed ${uploadedFile ? 'var(--green)' : 'var(--border-color)'}`,
-                  borderRadius: 16, padding: '22px 16px', cursor: 'pointer', marginBottom: 10,
-                  background: uploadedFile ? 'var(--green-light)' : '#fafbfd', transition: 'all 0.2s',
-                }}>
-                  <span style={{ fontSize: 34, marginBottom: 8 }}>{uploadedFile ? '✅' : '📂'}</span>
-                  {uploadedFile ? (
-                    <div style={{ textAlign: 'center' }}>
-                      <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--green)', marginBottom: 3 }}>{uploadedFile.name}</div>
-                      <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{(uploadedFile.size / 1024).toFixed(0)} KB · PDF ready to submit</div>
-                    </div>
-                  ) : (
-                    <div style={{ textAlign: 'center' }}>
-                      <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 3 }}>Select your edited PDF</div>
-                      <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Tap here to browse files · PDF only · max 20 MB</div>
-                    </div>
-                  )}
-                </label>
-                <input
-                  id="pdf-upload" type="file" accept=".pdf,application/pdf"
-                  onChange={handleFileSelect}
-                  style={{ display: 'none' }}
-                />
-
-                {fileError && (
-                  <div style={{ background: '#fee2e2', borderRadius: 10, padding: '10px 12px', marginBottom: 10, fontSize: 12, color: '#991b1b', fontWeight: 600 }}>
-                    {fileError}
-                  </div>
-                )}
-
-                <button
-                  onClick={handleSubmit}
-                  disabled={!uploadedFile}
-                  style={{ width: '100%', padding: '14px', borderRadius: 14, border: 'none', fontFamily: 'var(--font-sans)', fontWeight: 800, fontSize: 15, cursor: uploadedFile ? 'pointer' : 'not-allowed', transition: 'all 0.2s',
-                    background: uploadedFile ? 'var(--grad-green)' : '#e5e7eb',
-                    color: uploadedFile ? 'white' : 'var(--text-muted)',
-                    boxShadow: uploadedFile ? 'var(--green-glow)' : 'none',
-                  }}
-                >
-                  {uploadedFile ? '⬆️  Submit Edited PDF' : 'Select a PDF file to continue'}
-                </button>
-              </div>
-            )}
-
-            {/* Uploading spinner */}
-            {phase === 'uploading' && (
-              <div style={{ textAlign: 'center', padding: '16px 0' }}>
-                <div style={{ width: 48, height: 48, border: '4px solid var(--green-light)', borderTopColor: 'var(--green)', borderRadius: '50%', animation: 'spin 0.9s linear infinite', margin: '0 auto 14px' }} />
-                <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 4 }}>Uploading your PDF…</div>
-                <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>Please wait while we verify your file</div>
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* ── PHASE: done ── */}
-        {phase === 'done' && (
-          <div>
-            <div style={{ background: 'linear-gradient(135deg,rgba(0,195,126,0.08),rgba(0,232,150,0.04))', border: '1.5px solid var(--green-border)', borderRadius: 20, padding: '28px 20px', marginBottom: 16, textAlign: 'center' }}>
-              <div style={{ width: 60, height: 60, borderRadius: '50%', background: 'var(--green)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 14px', fontSize: 28, boxShadow: 'var(--green-glow)' }}>✓</div>
-              <div style={{ fontSize: 18, fontWeight: 800, color: 'var(--green)', marginBottom: 6, fontFamily: 'var(--font-display)' }}>Task Submitted! 🎉</div>
-              <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 6 }}>
-                📄 {uploadedFile?.name}
-              </div>
-              <div style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.6 }}>
-                Your PDF is under QA review.<br />
-                <strong style={{ color: 'var(--text-primary)' }}>₹{task.reward}</strong> will be credited within 24 hrs.
-              </div>
-            </div>
-            <button className="btn-green" style={{ width: '100%', borderRadius: 14 }} onClick={onClose}>
-              Back to Tasks 👍
-            </button>
-          </div>
-        )}
       </div>
     </div>
   );
@@ -462,22 +324,43 @@ const TaskCard = ({ task, locked, claimed, onPress }) => (
 );
 
 // ─── Main Task Tab ────────────────────────────────────────────────────────────
-const TaskTab = ({ userName, isPro, onUpgrade, onTaskComplete }) => {
-  const [selectedTask, setSelectedTask] = useState(null);
-  const [showUpgrade,  setShowUpgrade]  = useState(false);
-  const [doneIds,      setDoneIds]      = useState(() => {
+const TaskTab = ({ userName, isPro, onUpgrade, onTaskComplete, onNavigateToPayment, proPriceAmount = DEFAULT_PRO_PRICING.amount }) => {
+  const [showTaskOptions, setShowTaskOptions] = useState(false);
+  const [showTaskDetails, setShowTaskDetails] = useState(false);
+  const [selectedTaskType, setSelectedTaskType] = useState('pdf');
+  const [taskDetailsOpenState, setTaskDetailsOpenState] = useState('select');
+  const [showUpgrade, setShowUpgrade] = useState(false);
+  const [showHowToWork, setShowHowToWork] = useState(false);
+  const [howToWorkConfig, setHowToWorkConfig] = useState(null);
+  const [howToWorkWebView, setHowToWorkWebView] = useState(null);
+  const [doneIds, setDoneIds] = useState(() => {
     try { return JSON.parse(localStorage.getItem('sw_done_ids') || '[]'); } catch { return []; }
   });
+
+  useEffect(() => {
+    let active = true;
+    getHowToWorkConfig().then((config) => {
+      if (active) setHowToWorkConfig(config);
+    });
+    return () => { active = false; };
+  }, []);
 
   const handleSelectTask = (task, locked) => {
     const body = document.querySelector('.screen-body');
     if (body) body.scrollTo({ top: 0, behavior: 'smooth' });
-    locked ? setShowUpgrade(true) : setSelectedTask(task);
+    if (locked) {
+      setShowUpgrade(true);
+      return;
+    }
+    setSelectedTaskType('pdf');
+    setShowTaskOptions(true);
   };
 
   const handleTaskDone = (reward) => {
     try { setDoneIds(JSON.parse(localStorage.getItem('sw_done_ids') || '[]')); } catch {}
     if (onTaskComplete) onTaskComplete(reward);
+    setShowTaskDetails(false);
+    setTaskDetailsOpenState('select');
   };
 
   const handleUpgrade = () => { onUpgrade(); setShowUpgrade(false); };
@@ -495,12 +378,18 @@ const TaskTab = ({ userName, isPro, onUpgrade, onTaskComplete }) => {
         <div style={{ position:'absolute', top:30, right:60, width:60, height:60, borderRadius:'50%', background:'rgba(127,86,217,0.2)' }} />
 
         <div style={{ position:'relative', zIndex:1 }}>
-          <h2 style={{ fontSize: 22, fontWeight: 900, color: 'white', fontFamily: 'var(--font-display)', marginBottom: 6, letterSpacing: '-0.3px' }}>
-            Daily PDF Tasks
-          </h2>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
+            <AppLogo size={36} rounded={10} />
+            <h2 style={{ fontSize: 22, fontWeight: 900, color: 'white', fontFamily: 'var(--font-display)', margin: 0, letterSpacing: '-0.3px' }}>
+              Daily Tasks
+            </h2>
+          </div>
           <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.5)', marginBottom: 18, lineHeight: 1.5 }}>
-            Download · Edit · Upload · Get Paid by{' '}
-            <span style={{ color: '#4ade80', fontWeight: 700 }}>SkillWork</span>
+            Choose · Edit · Earn · Get Paid by{' '}
+            <span style={{ color: '#4ade80', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: 6, verticalAlign: 'middle' }}>
+              <AppLogo size={18} rounded={4} style={{ display: 'inline-block' }} />
+              24hrwork
+            </span>
           </p>
 
           {/* Stats row */}
@@ -523,7 +412,7 @@ const TaskTab = ({ userName, isPro, onUpgrade, onTaskComplete }) => {
       {/* ── CONTENT ── */}
       <div style={{ padding: '0 16px', marginTop: -20 }}>
 
-        {/* How to use card */}
+        {/* How to use card — content opens from button */}
         <div className="card animate-fade-up" style={{ padding: 18, marginBottom: 16 }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
             <h3 style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)', fontFamily: 'var(--font-display)' }}>How To Use</h3>
@@ -532,38 +421,16 @@ const TaskTab = ({ userName, isPro, onUpgrade, onTaskComplete }) => {
             </span>
           </div>
 
-          {/* Step row */}
-          <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
-            {[
-              { n: '1', label: 'Pick Task', icon: '📋' },
-              { n: '→', label: '', icon: '' },
-              { n: '2', label: 'Download', icon: '⬇️' },
-              { n: '→', label: '', icon: '' },
-              { n: '3', label: 'Edit & Upload', icon: '⬆️' },
-            ].map((s, i) => s.n === '→'
-              ? <div key={i} style={{ display: 'flex', alignItems: 'center', color: 'var(--text-muted)', fontSize: 16, paddingTop: 6 }}>›</div>
-              : <div key={i} style={{ flex: 1, background: '#f8f9fc', borderRadius: 12, padding: '10px 6px', textAlign: 'center', border: '1px solid var(--border-color)' }}>
-                  <div style={{ fontSize: 20, marginBottom: 4 }}>{s.icon}</div>
-                  <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-secondary)' }}>{s.label}</div>
-                </div>
-            )}
-          </div>
-
-          {/* Reward + CTA */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 12, background: 'var(--green-light)', borderRadius: 12, padding: '12px 14px', border: '1px solid var(--green-border)', marginBottom: 14 }}>
             <span style={{ fontSize: 24 }}>🪙</span>
             <div style={{ flex: 1 }}>
               <div style={{ fontSize: 15, fontWeight: 800, color: 'var(--text-primary)', fontFamily: 'var(--font-display)' }}>₹100 Per Work</div>
               <div style={{ fontSize: 11, color: 'var(--text-secondary)' }}>Earn up to ₹{isPro ? '5,000' : '1,500'} daily</div>
             </div>
-            <div style={{ width: 40, height: 40, borderRadius: 12, background: 'var(--green)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', boxShadow: 'var(--green-glow)' }}
-                 onClick={() => handleSelectTask(TASKS[0], false)}>
-              <span style={{ fontSize: 20, color: 'white' }}>⬇️</span>
-            </div>
           </div>
 
-          <button className="btn-blue" onClick={() => handleSelectTask(TASKS[0], false)}>
-            🚀 Start Working Now
+          <button className="btn-blue" onClick={() => setShowHowToWork(true)}>
+            📖 How To Work
           </button>
         </div>
 
@@ -614,8 +481,71 @@ const TaskTab = ({ userName, isPro, onUpgrade, onTaskComplete }) => {
       </div>
 
       {/* Modals */}
-      {selectedTask && <TaskDetailModal task={selectedTask} onClose={() => setSelectedTask(null)} onTaskComplete={handleTaskDone} />}
-      {showUpgrade   && <UpgradeModal   onClose={() => setShowUpgrade(false)} onUpgrade={handleUpgrade} onNavigateToPayment={onNavigateToPayment} />}
+      {showTaskOptions && (
+        <div className="modal-overlay" onClick={() => setShowTaskOptions(false)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ paddingBottom: 30, background: 'linear-gradient(180deg,#ffffff,#f8fafe)', borderRadius: 28, border: '1px solid rgba(15,18,32,0.08)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 18, gap: 12 }}>
+              <div style={{ flex: 1 }}>
+                <h3 style={{ fontSize: 20, fontWeight: 900, marginBottom: 6, color: 'var(--text-primary)' }}>Pick Your Task Style</h3>
+                <p style={{ fontSize: 14, color: 'var(--text-secondary)', lineHeight: 1.7, margin: 0 }}>Choose a task type to open the full-screen task workspace.</p>
+              </div>
+              <button onClick={() => setShowTaskOptions(false)} style={{ border: 'none', background: 'transparent', color: 'var(--text-secondary)', fontSize: 24, cursor: 'pointer', lineHeight: 1 }}>✕</button>
+            </div>
+
+            <div style={{ display: 'grid', gap: 14 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 14, padding: 18, borderRadius: 20, background: 'white', border: '1px solid rgba(15,18,32,0.08)', boxShadow: '0 20px 40px rgba(15,18,32,0.05)' }}>
+                <div style={{ width: 52, height: 52, borderRadius: 18, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(23,92,211,0.12)', color: '#175CD3', fontSize: 26 }}>📄</div>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: 15, fontWeight: 800, color: 'var(--text-primary)' }}>PDF Editing</div>
+                  <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginTop: 4 }}>Fix invoices, contracts, or scanned documents with a smart editor flow.</div>
+                </div>
+              </div>
+              <button onClick={() => { setSelectedTaskType('pdf'); setTaskDetailsOpenState('active'); setShowTaskOptions(false); setShowTaskDetails(true); }} style={{ width: '100%', background: 'linear-gradient(135deg,#175CD3,#2E90FA)', border: 'none', padding: '16px', borderRadius: 16, color: 'white', fontWeight: 700, cursor: 'pointer', fontSize: 15 }}>
+                Start PDF Task
+              </button>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: 14, padding: 18, borderRadius: 20, background: 'white', border: '1px solid rgba(15,18,32,0.08)', boxShadow: '0 20px 40px rgba(15,18,32,0.05)' }}>
+                <div style={{ width: 52, height: 52, borderRadius: 18, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(127,86,217,0.12)', color: '#7F56D9', fontSize: 26 }}>👤</div>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: 15, fontWeight: 800, color: 'var(--text-primary)' }}>Resume Filling</div>
+                  <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginTop: 4 }}>Fill resume details, format sections, and submit a polished candidate profile.</div>
+                </div>
+              </div>
+              <button onClick={() => { setSelectedTaskType('resume'); setTaskDetailsOpenState('active'); setShowTaskOptions(false); setShowTaskDetails(true); }} style={{ width: '100%', background: 'linear-gradient(135deg,#7F56D9,#A855F7)', border: 'none', padding: '16px', borderRadius: 16, color: 'white', fontWeight: 700, cursor: 'pointer', fontSize: 15 }}>
+                Start Resume Task
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {showTaskDetails && (
+        <TaskDetails
+          initialTaskType={selectedTaskType}
+          initialTaskState={taskDetailsOpenState}
+          onClose={() => { setShowTaskDetails(false); setTaskDetailsOpenState('select'); }}
+          onComplete={handleTaskDone}
+        />
+      )}
+      {showUpgrade && <UpgradeModal onClose={() => setShowUpgrade(false)} onUpgrade={handleUpgrade} onNavigateToPayment={onNavigateToPayment} proPriceAmount={proPriceAmount} />}
+      {showHowToWork && (
+        <HowToWorkModal
+          config={howToWorkConfig}
+          isPro={isPro}
+          onClose={() => setShowHowToWork(false)}
+          onOpenPage={(url, title) => {
+            setShowHowToWork(false);
+            setHowToWorkWebView({ url, title: title || 'How To Work' });
+          }}
+        />
+      )}
+      {howToWorkWebView && (
+        <PaymentWebView
+          url={howToWorkWebView.url}
+          title={howToWorkWebView.title}
+          subtitle="Tutorial guide"
+          onClose={() => setHowToWorkWebView(null)}
+        />
+      )}
     </div>
   );
 };

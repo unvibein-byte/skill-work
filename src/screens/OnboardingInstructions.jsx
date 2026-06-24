@@ -1,6 +1,8 @@
+import { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowRight, Download, Edit3, Upload, CheckCircle } from 'lucide-react';
 import { motion } from 'framer-motion';
+import AppLogo from '../components/AppLogo';
 
 const steps = [
   { icon: Download, title: 'Download Task', desc: 'Get your daily PDF task from the dashboard.' },
@@ -11,6 +13,16 @@ const steps = [
 
 const OnboardingInstructions = () => {
   const navigate = useNavigate();
+
+  useEffect(() => {
+    if (
+      localStorage.getItem('sw_onboarding_complete') === 'true' &&
+      localStorage.getItem('sw_name')?.trim() &&
+      localStorage.getItem('sw_phone')?.trim()
+    ) {
+      navigate('/main', { replace: true });
+    }
+  }, [navigate]);
 
   return (
     <motion.div
@@ -30,8 +42,8 @@ const OnboardingInstructions = () => {
           transition={{ duration: 0.5, delay: 0.1 }}
           style={{ position: 'relative', zIndex: 1 }}
         >
-          <div style={{ width: 56, height: 56, background: 'linear-gradient(135deg,#00c37e,#00e896)', borderRadius: 18, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', boxShadow: '0 8px 24px rgba(0,195,126,0.4)', marginBottom: 18 }}>
-            <CheckCircle size={28} />
+          <div style={{ marginBottom: 18 }}>
+            <AppLogo size={56} rounded={18} withBackground withGlow />
           </div>
           <h1 style={{ fontSize: 26, fontWeight: 900, color: 'white', fontFamily: "'Outfit',sans-serif", letterSpacing: '-0.3px', marginBottom: 8 }}>
             How it works
@@ -85,7 +97,7 @@ const OnboardingInstructions = () => {
             display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
             width: '100%', transition: 'all 0.2s'
           }}
-          onClick={() => navigate('/onboarding-2')}
+          onClick={() => navigate('/onboarding-3')}
           onMouseOver={e => e.currentTarget.style.transform = 'translateY(-2px)'}
           onMouseOut={e => e.currentTarget.style.transform = 'translateY(0)'}
         >

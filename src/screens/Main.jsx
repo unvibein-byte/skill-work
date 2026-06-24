@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import HomeTab from './tabs/HomeTab';
 import TaskTab from './tabs/TaskTab';
@@ -8,11 +9,16 @@ import BillingsTab from './tabs/BillingsTab';
 import AnalyticsTab from './tabs/AnalyticsTab';
 import WithdrawSheet from './tabs/WithdrawSheet';
 import AchievementsTab from './tabs/AchievementsTab';
-import AdminTab from './tabs/AdminTab';
 import { useLang } from '../i18n/LangContext';
-import LiveNotification from '../components/LiveNotification';
-import { getUserProfile, isUserPremium, updateUserTaskCount, updateUserWalletBalance, isFirebaseConfigured, db } from '../firebase';
+import { getUserProfile, isUserPremium, updateUserTaskCount, applyWalletTransaction, ensureUserWalletTotals, isFirebaseConfigured, db, getProPricing, DEFAULT_PRO_PRICING, getKycRequirements, DEFAULT_KYC_REQUIREMENTS, isUserKycFeePaid, completeFakeKycPayment, isUserBlocked, getBlockedUserMessage } from '../firebase';
+import { sumLocalTaskRewards } from '../utils/wallet';
 import { doc, onSnapshot } from 'firebase/firestore';
+import { clearUserSession, setStoredBlockMessage } from '../utils/accountSession';
+import AppLogo from '../components/AppLogo';
+import PremiumPaymentSheet from '../components/PremiumPaymentSheet';
+
+const SHOW_FAKE_KYC =
+  import.meta.env.DEV || import.meta.env.VITE_ENABLE_FAKE_KYC === 'true';
 
 /* ─── Language Toggle Button ─────────────────────────────────────────────── */
 const LangToggle = () => {
@@ -41,6 +47,7 @@ const LangToggle = () => {
 
 /* ─── Inner Main (uses lang context) ────────────────────────────────────────── */
 const MainInner = () => {
+  const navigate = useNavigate();
   const { t, lang } = useLang();
   const userName = localStorage.getItem('sw_name') || 'Aman';
   const userId = localStorage.getItem('sw_userId');
@@ -50,14 +57,51 @@ const MainInner = () => {
   const [activeBottom, setActiveBottom] = useState('home');
   const [isPro, setIsPro] = useState(() => localStorage.getItem('sw_pro') === 'true');
   const [showWithdraw, setShowWithdraw] = useState(false);
+  const [showPaymentSheet, setShowPaymentSheet] = useState(false);
 
   const [balance, setBalance] = useState(() =>
     parseFloat(localStorage.getItem('sw_balance') || '0')
+  );
+  const [totalEarned, setTotalEarned] = useState(() =>
+    parseFloat(localStorage.getItem('sw_total_earned') || '0')
   );
   const [completedCount, setCompletedCount] = useState(() => {
     try { return JSON.parse(localStorage.getItem('sw_completed') || '[]').length; }
     catch { return 0; }
   });
+
+  const [proPricing, setProPricing] = useState(() => ({ ...DEFAULT_PRO_PRICING }));
+  const [kycRequirements, setKycRequirements] = useState(() => ({ ...DEFAULT_KYC_REQUIREMENTS }));
+  const [kycFeePaid, setKycFeePaid] = useState(false);
+
+  const redirectIfBlocked = (userData) => {
+    if (!isUserBlocked(userData)) return;
+    setStoredBlockMessage(getBlockedUserMessage(userData));
+    clearUserSession();
+    navigate('/blocked', { replace: true });
+  };
+
+  useEffect(() => {
+    let cancelled = false;
+    getProPricing().then((p) => {
+      if (!cancelled) setProPricing(p);
+    });
+    getKycRequirements().then((k) => {
+      if (!cancelled) setKycRequirements(k);
+    });
+    return () => { cancelled = true; };
+  }, []);
+
+  const proPriceAmount = proPricing.amount;
+
+  useEffect(() => {
+    if (!userId) return;
+    let cancelled = false;
+    isUserKycFeePaid(userId).then((paid) => {
+      if (!cancelled) setKycFeePaid(!!paid);
+    });
+    return () => { cancelled = true; };
+  }, [userId]);
 
   // Load user data from Firebase on mount and set up real-time listener
   useEffect(() => {
@@ -67,21 +111,42 @@ const MainInner = () => {
       try {
         const userProfile = await getUserProfile(userPhone || userId);
         if (userProfile) {
+          if (isUserBlocked(userProfile)) {
+            redirectIfBlocked(userProfile);
+            return;
+          }
+
           // Update premium status
           const premiumStatus = await isUserPremium(userId);
           setIsPro(premiumStatus);
           localStorage.setItem('sw_pro', premiumStatus ? 'true' : 'false');
 
           // Update balance if stored in Firebase
+          const identifier = userPhone || userId;
+          if (identifier) {
+            await ensureUserWalletTotals(identifier, sumLocalTaskRewards());
+          }
+
           if (userProfile.walletBalance !== undefined) {
             setBalance(userProfile.walletBalance);
             localStorage.setItem('sw_balance', String(userProfile.walletBalance));
+          }
+          if (userProfile.totalEarned !== undefined) {
+            setTotalEarned(userProfile.totalEarned);
+            localStorage.setItem('sw_total_earned', String(userProfile.totalEarned));
           }
 
           // Update task count if stored in Firebase
           if (userProfile.taskCount !== undefined) {
             setCompletedCount(userProfile.taskCount);
           }
+
+          if (userProfile.kycFeePaid !== undefined) {
+            setKycFeePaid(!!userProfile.kycFeePaid);
+          }
+
+          const kycPaid = await isUserKycFeePaid(userId);
+          setKycFeePaid(kycPaid);
         }
       } catch (error) {
         console.error('Failed to load user data from Firebase', error);
@@ -95,10 +160,15 @@ const MainInner = () => {
     const normalizedPhone = userPhone.replace(/\D/g, '');
     const userDocRef = doc(db, 'users', normalizedPhone);
     
-    const unsubscribe = onSnapshot(userDocRef, (doc) => {
-      if (doc.exists()) {
-        const userData = doc.data();
-        
+    const unsubscribe = onSnapshot(userDocRef, (docSnap) => {
+      if (docSnap.exists()) {
+        const userData = docSnap.data();
+
+        if (isUserBlocked(userData)) {
+          redirectIfBlocked(userData);
+          return;
+        }
+
         // Update premium status if changed
         if (userData.isPremium !== undefined) {
           setIsPro(userData.isPremium);
@@ -110,10 +180,18 @@ const MainInner = () => {
           setBalance(userData.walletBalance);
           localStorage.setItem('sw_balance', String(userData.walletBalance));
         }
+        if (userData.totalEarned !== undefined) {
+          setTotalEarned(userData.totalEarned);
+          localStorage.setItem('sw_total_earned', String(userData.totalEarned));
+        }
 
         // Update task count if changed
         if (userData.taskCount !== undefined) {
           setCompletedCount(userData.taskCount);
+        }
+
+        if (userData.kycFeePaid !== undefined) {
+          setKycFeePaid(!!userData.kycFeePaid);
         }
       }
     }, (error) => {
@@ -124,53 +202,96 @@ const MainInner = () => {
     return () => unsubscribe();
   }, [userId, userPhone]);
 
+  const syncWalletFromFirebase = (wallet) => {
+    if (!wallet) return;
+    setBalance(wallet.walletBalance);
+    setTotalEarned(wallet.totalEarned);
+    localStorage.setItem('sw_balance', String(wallet.walletBalance));
+    localStorage.setItem('sw_total_earned', String(wallet.totalEarned));
+  };
+
   const handleTaskComplete = async (reward) => {
-    const newBal = parseFloat((balance + reward).toFixed(2));
     const newCount = completedCount + 1;
-    
-    setBalance(newBal);
     setCompletedCount(newCount);
-    
-    localStorage.setItem('sw_balance', String(newBal));
-    
-    // Sync to Firebase
-    if (isFirebaseConfigured && userPhone) {
+
+    const identifier = userPhone || userId;
+    if (isFirebaseConfigured && identifier) {
       try {
-        await updateUserWalletBalance(userPhone, newBal);
-        await updateUserTaskCount(userPhone, newCount);
+        const wallet = await applyWalletTransaction(identifier, {
+          type: 'task_reward',
+          amount: reward,
+          meta: { source: 'task_complete' },
+        });
+        if (wallet) {
+          syncWalletFromFirebase(wallet);
+        }
+        await updateUserTaskCount(identifier, newCount);
       } catch (error) {
         console.error('Failed to sync task completion to Firebase', error);
+        const fallbackBal = parseFloat((balance + reward).toFixed(2));
+        setBalance(fallbackBal);
+        localStorage.setItem('sw_balance', String(fallbackBal));
       }
+    } else {
+      const fallbackBal = parseFloat((balance + reward).toFixed(2));
+      const fallbackEarned = parseFloat((totalEarned + reward).toFixed(2));
+      setBalance(fallbackBal);
+      setTotalEarned(fallbackEarned);
+      localStorage.setItem('sw_balance', String(fallbackBal));
+      localStorage.setItem('sw_total_earned', String(fallbackEarned));
     }
   };
 
   const handleStreakClaim = async (reward) => {
-    const newBal = parseFloat((balance + reward).toFixed(2));
-    setBalance(newBal);
-    localStorage.setItem('sw_balance', String(newBal));
-    
-    // Sync to Firebase
-    if (isFirebaseConfigured && userPhone) {
+    const identifier = userPhone || userId;
+    if (isFirebaseConfigured && identifier) {
       try {
-        await updateUserWalletBalance(userPhone, newBal);
+        const wallet = await applyWalletTransaction(identifier, {
+          type: 'streak_bonus',
+          amount: reward,
+          meta: { source: 'streak_claim' },
+        });
+        if (wallet) {
+          syncWalletFromFirebase(wallet);
+        }
       } catch (error) {
         console.error('Failed to sync streak claim to Firebase', error);
+        const fallbackBal = parseFloat((balance + reward).toFixed(2));
+        setBalance(fallbackBal);
+        localStorage.setItem('sw_balance', String(fallbackBal));
       }
+    } else {
+      const fallbackBal = parseFloat((balance + reward).toFixed(2));
+      const fallbackEarned = parseFloat((totalEarned + reward).toFixed(2));
+      setBalance(fallbackBal);
+      setTotalEarned(fallbackEarned);
+      localStorage.setItem('sw_balance', String(fallbackBal));
+      localStorage.setItem('sw_total_earned', String(fallbackEarned));
     }
   };
 
   const handleWithdraw = async (amount) => {
-    const newBal = parseFloat(Math.max(balance - amount, 0).toFixed(2));
-    setBalance(newBal);
-    localStorage.setItem('sw_balance', String(newBal));
-    
-    // Sync to Firebase
-    if (isFirebaseConfigured && userPhone) {
+    const identifier = userPhone || userId;
+    if (isFirebaseConfigured && identifier) {
       try {
-        await updateUserWalletBalance(userPhone, newBal);
+        const wallet = await applyWalletTransaction(identifier, {
+          type: 'withdrawal',
+          amount,
+          meta: { source: 'withdraw' },
+        });
+        if (wallet) {
+          syncWalletFromFirebase(wallet);
+        }
       } catch (error) {
         console.error('Failed to sync withdrawal to Firebase', error);
+        const fallbackBal = parseFloat(Math.max(balance - amount, 0).toFixed(2));
+        setBalance(fallbackBal);
+        localStorage.setItem('sw_balance', String(fallbackBal));
       }
+    } else {
+      const fallbackBal = parseFloat(Math.max(balance - amount, 0).toFixed(2));
+      setBalance(fallbackBal);
+      localStorage.setItem('sw_balance', String(fallbackBal));
     }
   };
 
@@ -203,6 +324,17 @@ const MainInner = () => {
         console.error('Failed to sync premium status to Firebase', error);
       }
     }
+
+    try {
+      const kycPaid = await isUserKycFeePaid(userId);
+      if (!kycPaid) {
+        localStorage.setItem('sw_open_kyc_payment', 'true');
+        setActiveBottom('setting');
+        setActiveTop('Dashboard');
+      }
+    } catch (error) {
+      console.error('Failed to check KYC status after premium upgrade', error);
+    }
     
     return true;
   };
@@ -226,12 +358,26 @@ const MainInner = () => {
   };
 
   const handleNavigateToPayment = () => {
-    // Navigate to settings tab and open payment sheet
+    setShowPaymentSheet(true);
+  };
+
+  const handleNavigateToKycPayment = () => {
+    setShowWithdraw(false);
     setActiveBottom('setting');
     setActiveTop('Dashboard');
-    // Store a flag to open payment sheet when SettingTab mounts
-    localStorage.setItem('sw_open_payment', 'true');
+    localStorage.setItem('sw_open_kyc_payment', 'true');
     document.querySelector('.screen-body')?.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const handleFakeKycCompleteFromWithdraw = async () => {
+    if (!userId || !isFirebaseConfigured) return;
+    try {
+      await completeFakeKycPayment(userId);
+      setKycFeePaid(true);
+      setShowWithdraw(false);
+    } catch (e) {
+      console.error(e);
+    }
   };
 
   const handleTopTab = (tab) => {
@@ -248,7 +394,6 @@ const MainInner = () => {
     { key: 'Billings', label: t('tab_billings') },
     { key: 'Analytics', label: t('tab_analytics') },
     { key: 'Achievements', label: t('tab_achievements') },
-    { key: 'Admin', label: 'Admin' },
   ];
   const BOTTOM_TABS = [
     { key: 'home', label: t('nav_home'), icon: '🏠' },
@@ -261,15 +406,14 @@ const MainInner = () => {
     if (activeBottom === 'refer') return <ReferTab userName={userName} />;
     if (activeBottom === 'setting') return <SettingTab userName={userName} isPro={isPro} onUpgrade={handleUpgrade} onDowngrade={handleDowngrade} />;
 
-    if (activeTop === 'Daily Task') return <TaskTab userName={userName} isPro={isPro} onUpgrade={handleUpgrade} onTaskComplete={handleTaskComplete} onNavigateToPayment={handleNavigateToPayment} />;
-    if (activeTop === 'Billings') return <BillingsTab isPro={isPro} onUpgrade={handleUpgrade} onDowngrade={handleDowngrade} onNavigateToPayment={handleNavigateToPayment} />;
-    if (activeTop === 'Analytics') return <AnalyticsTab isPro={isPro} completedCount={completedCount} />;
-    if (activeTop === 'Achievements') return <AchievementsTab isPro={isPro} />;
-    if (activeTop === 'Admin') return <AdminTab />;
+    if (activeTop === 'Daily Task') return <TaskTab userName={userName} isPro={isPro} onUpgrade={handleUpgrade} onTaskComplete={handleTaskComplete} onNavigateToPayment={handleNavigateToPayment} proPriceAmount={proPriceAmount} />;
+    if (activeTop === 'Billings') return <BillingsTab isPro={isPro} onUpgrade={handleUpgrade} onDowngrade={handleDowngrade} onNavigateToPayment={handleNavigateToPayment} proPriceAmount={proPriceAmount} />;
+    if (activeTop === 'Analytics') return <AnalyticsTab isPro={isPro} completedCount={completedCount} proPriceAmount={proPriceAmount} totalEarned={totalEarned} walletBalance={balance} />;
+    if (activeTop === 'Achievements') return <AchievementsTab isPro={isPro} totalEarned={totalEarned} walletBalance={balance} />;
 
     return (
       <HomeTab
-        userName={userName} isPro={isPro} balance={balance} completedCount={completedCount}
+        userName={userName} isPro={isPro} balance={balance} totalEarned={totalEarned} completedCount={completedCount}
         onStartWork={() => { setActiveBottom('task'); setActiveTop('Daily Task'); }}
         onWithdraw={() => setShowWithdraw(true)}
         onStreakClaim={handleStreakClaim}
@@ -284,11 +428,14 @@ const MainInner = () => {
     >
       {/* ── HEADER ── */}
       <div className="app-header">
-        <div className="header-profile">
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <AppLogo size={34} rounded={10} />
+          <div className="header-profile" style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <div className="avatar">{userName.charAt(0).toUpperCase()}</div>
           <div className="header-text">
             <h4>{t('welcome_back')}</h4>
             <span>{userName}</span>
+          </div>
           </div>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -323,10 +470,24 @@ const MainInner = () => {
         {renderContent()}
       </div>
 
+      {/* ── PREMIUM PAYMENT SHEET ── */}
+      <PremiumPaymentSheet
+        open={showPaymentSheet}
+        onClose={() => setShowPaymentSheet(false)}
+        onUpgrade={handleUpgrade}
+        proPriceAmount={proPriceAmount}
+      />
+
       {/* ── WITHDRAW SHEET ── */}
       {showWithdraw && (
         <WithdrawSheet
           balance={balance}
+          proPriceAmount={proPriceAmount}
+          kycRequirements={kycRequirements}
+          kycFeePaid={!isFirebaseConfigured || kycFeePaid}
+          onNavigateToKycPayment={handleNavigateToKycPayment}
+          showFakeKyc={SHOW_FAKE_KYC && isFirebaseConfigured}
+          onFakeKycComplete={handleFakeKycCompleteFromWithdraw}
           onClose={() => setShowWithdraw(false)}
           onWithdraw={(amt) => { handleWithdraw(amt); setShowWithdraw(false); }}
         />
@@ -346,9 +507,6 @@ const MainInner = () => {
           </button>
         ))}
       </div>
-
-      {/* ── LIVE NOTIFICATIONS ── */}
-      <LiveNotification />
     </motion.div>
   );
 };

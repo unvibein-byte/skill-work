@@ -1,6 +1,6 @@
 @echo off
 echo ========================================
-echo   Building SkillWork APK
+echo   Building 24hrwork APK
 echo ========================================
 echo.
 

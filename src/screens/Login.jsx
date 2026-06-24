@@ -1,39 +1,128 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { signInAnonymouslyUser, saveUserProfile, isFirebaseConfigured } from '../firebase';
+import {
+  ensureAnonymousUser,
+  saveUserProfile,
+  isFirebaseConfigured,
+  checkDeviceAllowsPhone,
+  syncDeviceBindingFromServer,
+  checkUserAccountStatus,
+  DEVICE_ALREADY_REGISTERED_MESSAGE,
+} from '../firebase';
+import { getPostSplashPath } from '../utils/sessionRoute';
+import { getDeviceId, normalizePhone, isDevicePhoneConflict } from '../utils/deviceId';
+import { setStoredBlockMessage } from '../utils/accountSession';
+import AppLogo from '../components/AppLogo';
 
 const Login = () => {
   const navigate = useNavigate();
-  const [name, setName] = useState('');
-  const [phone, setPhone] = useState('');
+  const [name, setName] = useState(() => localStorage.getItem('sw_name') || '');
+  const [phone, setPhone] = useState(() => localStorage.getItem('sw_phone') || '');
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    const next = getPostSplashPath();
+    if (next !== '/login') navigate(next, { replace: true });
+  }, [navigate]);
+
+  useEffect(() => {
+    const deviceId = getDeviceId();
+    syncDeviceBindingFromServer(deviceId).catch(() => {});
+  }, []);
 
   const handleLogin = async (e) => {
     e.preventDefault();
     if (!name || !phone) return;
 
+    setError('');
     setLoading(true);
+
+    const normalizedPhone = normalizePhone(phone);
+    const deviceId = getDeviceId();
+
+    if (isDevicePhoneConflict(phone)) {
+      setError(DEVICE_ALREADY_REGISTERED_MESSAGE);
+      setLoading(false);
+      return;
+    }
+
+    try {
+      const deviceCheck = await checkDeviceAllowsPhone(deviceId, normalizedPhone);
+      if (!deviceCheck.allowed) {
+        setError(deviceCheck.message || DEVICE_ALREADY_REGISTERED_MESSAGE);
+        setLoading(false);
+        return;
+      }
+
+      const accountCheck = await checkUserAccountStatus(normalizedPhone);
+      if (!accountCheck.allowed) {
+        setStoredBlockMessage(accountCheck.message);
+        setError(accountCheck.message);
+        setLoading(false);
+        return;
+      }
+    } catch (err) {
+      console.error('Device check failed', err);
+      setError('Could not verify this device. Please try again.');
+      setLoading(false);
+      return;
+    }
+
+    const alreadyFinishedOnboarding = localStorage.getItem('sw_onboarding_complete') === 'true';
+    let uid = localStorage.getItem('sw_userId') || null;
 
     if (isFirebaseConfigured) {
       try {
-        // Sign in anonymously (must be enabled in Firebase Authentication settings)
-        const { user } = await signInAnonymouslyUser();
+        const user = await ensureAnonymousUser();
         if (user?.uid) {
-          await saveUserProfile(user.uid, { name, phone });
-          localStorage.setItem('sw_userId', user.uid);
+          uid = user.uid;
+          await saveUserProfile(uid, { name, phone: normalizedPhone, deviceId });
+
+          const afterSave = await checkUserAccountStatus(normalizedPhone);
+          if (!afterSave.allowed) {
+            setStoredBlockMessage(afterSave.message);
+            setError(afterSave.message);
+            setLoading(false);
+            return;
+          }
+
+          localStorage.setItem('sw_userId', uid);
         }
-      } catch (error) {
-        console.error('Firebase login failed', error);
-        // Continue even if Firebase fails (app should still work locally)
+      } catch (err) {
+        if (err?.code === 'DEVICE_ALREADY_REGISTERED' || err?.message === 'DEVICE_ALREADY_REGISTERED') {
+          await syncDeviceBindingFromServer(deviceId);
+          setError(DEVICE_ALREADY_REGISTERED_MESSAGE);
+        } else {
+          console.error('Firebase login failed', err);
+          setError('Sign in failed. Please try again.');
+        }
+        setLoading(false);
+        return;
+      }
+    } else {
+      try {
+        localStorage.setItem('sw_device_phone', normalizedPhone);
+      } catch {
+        /* ignore */
       }
     }
 
-    // Keep local state for offline/demo usage
     localStorage.setItem('sw_name', name);
-    localStorage.setItem('sw_phone', phone);
+    localStorage.setItem('sw_phone', normalizedPhone);
+    // Only new users need the onboarding flow; do not reset returning users
+    if (!alreadyFinishedOnboarding) {
+      localStorage.setItem('sw_onboarding_complete', 'false');
+    }
 
-    setTimeout(() => navigate('/onboarding-1'), 1000);
+    setTimeout(() => {
+      if (alreadyFinishedOnboarding) {
+        navigate('/main', { replace: true });
+      } else {
+        navigate('/onboarding-1');
+      }
+    }, 600);
   };
 
   return (
@@ -54,8 +143,8 @@ const Login = () => {
           transition={{ duration: 0.5, delay: 0.1 }}
           style={{ position: 'relative', zIndex: 1 }}
         >
-          <div style={{ width: 56, height: 56, background: 'linear-gradient(135deg,#00c37e,#00e896)', borderRadius: 18, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 28, boxShadow: '0 8px 24px rgba(0,195,126,0.4)', marginBottom: 18 }}>
-            💼
+          <div style={{ marginBottom: 18 }}>
+            <AppLogo size={56} rounded={18} withBackground withGlow />
           </div>
           <h1 style={{ fontSize: 26, fontWeight: 900, color: 'white', fontFamily: "'Outfit',sans-serif", letterSpacing: '-0.3px', marginBottom: 8 }}>
             Start Earning Today
@@ -95,6 +184,25 @@ const Login = () => {
           Just fill in your details to get started
         </p>
 
+        {error && (
+          <div
+            role="alert"
+            style={{
+              background: '#fef2f2',
+              border: '1.5px solid #fecaca',
+              borderRadius: 12,
+              padding: '12px 14px',
+              marginBottom: 18,
+              fontSize: 13,
+              color: '#b91c1c',
+              fontWeight: 600,
+              lineHeight: 1.5,
+            }}
+          >
+            {error}
+          </div>
+        )}
+
         <form onSubmit={handleLogin} style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
           <div>
             <label style={{ display: 'block', fontSize: 13, color: '#5a6480', marginBottom: 7, fontWeight: 600 }}>
@@ -104,7 +212,7 @@ const Login = () => {
               <span style={{ position: 'absolute', left: 14, top: '50%', transform: 'translateY(-50%)', fontSize: 18 }}>👤</span>
               <input
                 type="text" placeholder="e.g. Aman Kumar" value={name}
-                onChange={e => setName(e.target.value)} required
+                onChange={e => { setName(e.target.value); setError(''); }} required
                 style={{ width: '100%', background: '#f0f2f8', border: '1.5px solid #e4e7f0', color: '#0f1220', padding: '14px 14px 14px 44px', borderRadius: 14, fontFamily: "'Inter',sans-serif", fontSize: 15, transition: 'all 0.2s', outline: 'none' }}
                 onFocus={e => { e.target.style.borderColor = '#00c37e'; e.target.style.background = 'white'; e.target.style.boxShadow = '0 0 0 3px rgba(0,195,126,0.12)'; }}
                 onBlur={e => { e.target.style.borderColor = '#e4e7f0'; e.target.style.background = '#f0f2f8'; e.target.style.boxShadow = 'none'; }}
@@ -120,7 +228,7 @@ const Login = () => {
               <span style={{ position: 'absolute', left: 14, top: '50%', transform: 'translateY(-50%)', fontSize: 18 }}>📱</span>
               <input
                 type="tel" placeholder="Enter 10-digit number" value={phone}
-                onChange={e => setPhone(e.target.value)} required
+                onChange={e => { setPhone(e.target.value); setError(''); }} required
                 style={{ width: '100%', background: '#f0f2f8', border: '1.5px solid #e4e7f0', color: '#0f1220', padding: '14px 14px 14px 44px', borderRadius: 14, fontFamily: "'Inter',sans-serif", fontSize: 15, transition: 'all 0.2s', outline: 'none' }}
                 onFocus={e => { e.target.style.borderColor = '#00c37e'; e.target.style.background = 'white'; e.target.style.boxShadow = '0 0 0 3px rgba(0,195,126,0.12)'; }}
                 onBlur={e => { e.target.style.borderColor = '#e4e7f0'; e.target.style.background = '#f0f2f8'; e.target.style.boxShadow = 'none'; }}

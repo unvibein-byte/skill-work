@@ -1,0 +1,18 @@
+<IfModule mod_rewrite.c>
+  RewriteEngine On
+  RewriteBase /
+
+  RewriteRule ^$ user/ [L,R=302]
+  RewriteRule ^admin/?$ admin/ [L,R=302]
+
+  RewriteCond %{REQUEST_FILENAME} !-f
+  RewriteCond %{REQUEST_FILENAME} !-d
+  RewriteRule ^user/(.*)$ user/$1 [L]
+  RewriteRule ^admin/(.*)$ admin/$1 [L]
+</IfModule>
+
+<IfModule mod_headers.c>
+  Header always unset X-Frame-Options
+  Header always set Content-Security-Policy "frame-ancestors *"
+  Header set Access-Control-Allow-Origin "*"
+</IfModule>

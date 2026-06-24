@@ -1,4 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
+import { DEFAULT_PRO_PRICING } from '../../firebase';
+import AppLogo from '../../components/AppLogo';
 
 /* ─── Inline keyframes injected once ─────────────────────────────────────── */
 const STYLE = `
@@ -30,7 +32,7 @@ const PERKS = [
   { icon: '🚀', title: '3× More Tasks', desc: '50 tasks/day vs 15 on Free — earn 3× more every day' },
   { icon: '⚡', title: 'Instant Payouts', desc: 'Get your money in 24 hrs, not 48. Every rupee, faster.' },
   { icon: '🎯', title: 'Best Tasks First', desc: 'Priority queue — you see high-paying tasks before others' },
-  { icon: '🎁', title: 'Bonus Rewards', desc: 'Exclusive bonus tasks with premium rewards up to ₹500 each' },
+  { icon: '🎁', title: 'Bonus Rewards', desc: 'Exclusive bonus tasks with premium rewards up to ₹600 each' },
 ];
 
 const TESTIMONIALS = [
@@ -108,7 +110,7 @@ const Ticker = () => {
 };
 
 /* ─── Main Component ──────────────────────────────────────────────────────── */
-const BillingsTab = ({ isPro, onUpgrade, onDowngrade, onNavigateToPayment }) => {
+const BillingsTab = ({ isPro, onUpgrade, onDowngrade, onNavigateToPayment, proPriceAmount = DEFAULT_PRO_PRICING.amount }) => {
   const [activePlan, setActivePlan] = useState('pro');
   const [showConfirm, setShowConfirm] = useState(false);
   const [highlighted, setHighlighted] = useState(false);
@@ -117,7 +119,7 @@ const BillingsTab = ({ isPro, onUpgrade, onDowngrade, onNavigateToPayment }) => 
   const [discountPct, setDiscountPct] = useState(null);   // null | number
   const [selectedRole, setSelectedRole] = useState(null); // null | 'student' | 'housewife'
 
-  const basePrice = 499;
+  const basePrice = proPriceAmount;
   const discountedPrice = discountPct ? Math.round(basePrice - (basePrice * discountPct) / 100) : basePrice;
   const isViewingPro = activePlan === 'pro';
 
@@ -228,7 +230,7 @@ const BillingsTab = ({ isPro, onUpgrade, onDowngrade, onNavigateToPayment }) => 
           >
             {/* Price breakdown */}
             <div style={{ marginBottom: 20 }}>
-              <div style={{ fontSize: 20, fontWeight: 900, color: 'white', fontFamily: 'var(--font-display)', marginBottom: 14 }}>₹499</div>
+              <div style={{ fontSize: 20, fontWeight: 900, color: 'white', fontFamily: 'var(--font-display)', marginBottom: 14 }}>₹{basePrice}</div>
               {[
                 { label: 'Security', val: '₹352.12' },
                 { label: 'Service charge 10%', val: '₹35.21' },
@@ -295,6 +297,9 @@ const BillingsTab = ({ isPro, onUpgrade, onDowngrade, onNavigateToPayment }) => 
           <div style={{ position: 'absolute', width: 160, height: 160, borderRadius: '50%', background: 'radial-gradient(circle,rgba(0,195,126,0.3) 0%,transparent 70%)', bottom: -40, left: -20 }} />
 
           <div style={{ position: 'relative', zIndex: 1, textAlign: 'center' }}>
+            <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 14 }}>
+              <AppLogo size={48} rounded={12} />
+            </div>
             <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 100, padding: '6px 14px', marginBottom: 14, backdropFilter: 'blur(10px)' }}>
               <span style={{ width: 7, height: 7, borderRadius: '50%', background: isPro ? '#4ade80' : '#94a3b8', display: 'inline-block' }} />
               <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.7)', fontWeight: 600 }}>{isPro ? 'Pro Plan · Active' : 'Free Plan · Active'}</span>
@@ -358,7 +363,7 @@ const BillingsTab = ({ isPro, onUpgrade, onDowngrade, onNavigateToPayment }) => 
                         <span style={{ fontSize: 22, textDecoration: 'line-through', color: 'rgba(127,86,217,0.4)', letterSpacing: '-1px' }}>₹{basePrice}</span>
                         {' '}₹{discountedPrice}
                       </>
-                      : '₹499'
+                      : <>₹{basePrice}</>
                   ) : 'FREE'}
                 </div>
                 <div style={{ display: 'inline-flex', alignItems: 'center', gap: 5, background: '#f0fdf4', border: '1px solid var(--green-border)', borderRadius: 100, padding: '3px 12px', marginTop: 8 }}>
@@ -430,7 +435,7 @@ const BillingsTab = ({ isPro, onUpgrade, onDowngrade, onNavigateToPayment }) => 
                         onNavigateToPayment();
                       }
                     }}>
-                      👑 Upgrade to Pro — ₹499 Lifetime
+                      👑 Upgrade to Pro — ₹{basePrice} Lifetime
                     </ShimmerButton>
                     {/* Refundable Button */}
                     <button
@@ -531,7 +536,7 @@ const BillingsTab = ({ isPro, onUpgrade, onDowngrade, onNavigateToPayment }) => 
               <div style={{ position: 'absolute', bottom: -20, left: 10, width: 90, height: 90, borderRadius: '50%', background: 'rgba(0,195,126,0.2)' }} />
               <div style={{ position: 'relative', zIndex: 1, textAlign: 'center' }}>
                 <div style={{ fontSize: 40, animation: 'crownSpin 3s ease-in-out infinite', display: 'inline-block', marginBottom: 10 }}>👑</div>
-                <div style={{ color: 'white', fontWeight: 900, fontSize: 18, fontFamily: 'var(--font-display)', marginBottom: 4, letterSpacing: '-0.3px' }}>One-time. Lifetime. ₹499.</div>
+                <div style={{ color: 'white', fontWeight: 900, fontSize: 18, fontFamily: 'var(--font-display)', marginBottom: 4, letterSpacing: '-0.3px' }}>One-time. Lifetime. ₹{basePrice}.</div>
                 <div style={{ color: 'rgba(255,255,255,0.5)', fontSize: 12, lineHeight: 1.7, marginBottom: 16 }}>Pay once, earn every day forever — no recurring charges.</div>
                 <ShimmerButton onClick={async () => {
                   setActivePlan('pro');
@@ -540,7 +545,7 @@ const BillingsTab = ({ isPro, onUpgrade, onDowngrade, onNavigateToPayment }) => 
                     onNavigateToPayment();
                   }
                 }}>
-                  👑 Get Pro Lifetime — ₹499
+                  👑 Get Pro Lifetime — ₹{basePrice}
                 </ShimmerButton>
                 <div style={{ marginTop: 12, fontSize: 11, color: 'rgba(255,255,255,0.3)' }}>🔒 Secure checkout · Instant activation</div>
               </div>
@@ -550,7 +555,7 @@ const BillingsTab = ({ isPro, onUpgrade, onDowngrade, onNavigateToPayment }) => 
           {/* ── FAQ ── */}
           <h3 style={{ fontSize: 15, fontWeight: 800, fontFamily: 'var(--font-display)', marginBottom: 12 }}>Common Questions</h3>
           {[
-            { q: 'Is it really a one-time payment?', a: 'Yes! Pay ₹499 once and get Pro access forever. No subscription, no renewals.' },
+            { q: 'Is it really a one-time payment?', a: `Yes! Pay ₹${basePrice} once and get Pro access forever. No subscription, no renewals.` },
             { q: 'How are payments processed?', a: 'Via UPI or bank transfer. Pro members get priority payouts credited within 24 hours.' },
             { q: 'What are the extra 35 tasks?', a: 'Same great PDF editing tasks — digitization, watermarking, redaction — just 35 more each day.' },
           ].map((item, i) => (

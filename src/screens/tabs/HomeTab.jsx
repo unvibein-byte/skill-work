@@ -1,7 +1,13 @@
 import { useState } from 'react';
 import { useLang } from '../../i18n/LangContext';
-const HomeTab = ({ userName, isPro, balance = 0, completedCount = 0, onStartWork, onWithdraw, onStreakClaim }) => {
+import PaymentWebView from '../../components/PaymentWebView';
+import { getPaymentProofConfig } from '../../firebase';
+import AppLogo from '../../components/AppLogo';
+
+const HomeTab = ({ userName, isPro, balance = 0, totalEarned = 0, completedCount = 0, onStartWork, onWithdraw, onStreakClaim }) => {
   const { t } = useLang();
+  const [proofWebView, setProofWebView] = useState(null);
+  const [proofOpening, setProofOpening] = useState(false);
   const today = new Date();
   const todayStr = today.toISOString().slice(0, 10);
   const [claimedStreak, setClaimedStreak] = useState(() => localStorage.getItem('sw_streak_claim_date') === todayStr);
@@ -51,6 +57,36 @@ const HomeTab = ({ userName, isPro, balance = 0, completedCount = 0, onStartWork
     setClaimedStreak(true);
   };
 
+  const handlePaymentProof = async () => {
+    if (proofOpening) return;
+    setProofOpening(true);
+    try {
+      const config = await getPaymentProofConfig();
+      if (!config.proofUrl?.startsWith('http')) {
+        window.alert(t('payment_proof_url_missing'));
+        return;
+      }
+      const userId = localStorage.getItem('sw_userId');
+      const url = new URL(config.proofUrl);
+      if (userId) {
+        url.searchParams.set('userId', userId);
+      }
+      if (url.hostname.replace(/^www\./, '').toLowerCase() !== 'sites.google.com') {
+        url.searchParams.set('embed', '1');
+      }
+      setProofWebView({
+        url: url.toString(),
+        title: config.pageTitle || t('payment_proof'),
+        subtitle: t('payment_proof_sub'),
+      });
+    } catch (err) {
+      console.error('Payment proof', err);
+      window.alert(t('payment_proof_url_missing'));
+    } finally {
+      setProofOpening(false);
+    }
+  };
+
   return (
     <div style={{ padding: '16px' }}>
 
@@ -77,11 +113,14 @@ const HomeTab = ({ userName, isPro, balance = 0, completedCount = 0, onStartWork
                 ₹{parseFloat(balance).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </div>
               <p style={{ fontSize: 12, color: 'rgba(255,255,255,0.4)', marginTop: 6, fontWeight: 500 }}>{t('inr_updated')}</p>
+              <p style={{ fontSize: 11, color: 'rgba(74,222,128,0.85)', marginTop: 8, fontWeight: 600 }}>
+                {t('lifetime_earned')}: ₹{parseFloat(totalEarned).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </p>
             </div>
-            <div style={{ width: 52, height: 52, borderRadius: 16, background: 'rgba(0,195,126,0.15)', border: '1px solid rgba(0,195,126,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 26 }}>
-              💼
+            <div style={{ width: 52, height: 52, borderRadius: 16, background: 'rgba(0,195,126,0.15)', border: '1px solid rgba(0,195,126,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 6 }}>
+              <AppLogo size={40} rounded={10} />
             </div>
-          </div>
+</div>
 
           {/* Plan badge */}
           <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: 'rgba(255,255,255,0.08)', borderRadius: 100, padding: '5px 12px', marginBottom: 18, border: '1px solid rgba(255,255,255,0.1)' }}>
@@ -219,6 +258,61 @@ const HomeTab = ({ userName, isPro, balance = 0, completedCount = 0, onStartWork
           </div>
         ))}
       </div>
+
+      {/* ── PAYMENT PROOF ── */}
+      <button
+        type="button"
+        className="card animate-fade-up"
+        onClick={handlePaymentProof}
+        disabled={proofOpening}
+        style={{
+          width: '100%',
+          display: 'flex',
+          alignItems: 'center',
+          gap: 14,
+          padding: '16px 18px',
+          marginBottom: 24,
+          animationDelay: '0.26s',
+          border: '1px solid var(--border-color)',
+          background: '#fff',
+          cursor: proofOpening ? 'wait' : 'pointer',
+          textAlign: 'left',
+        }}
+      >
+        <div
+          style={{
+            width: 44,
+            height: 44,
+            borderRadius: 14,
+            background: 'rgba(67,97,238,0.1)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            fontSize: 22,
+            flexShrink: 0,
+          }}
+        >
+          🧾
+        </div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: 15, fontWeight: 800, color: 'var(--text-primary)', fontFamily: 'var(--font-display)' }}>
+            {t('payment_proof')}
+          </div>
+          <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 2 }}>
+            {proofOpening ? '…' : t('payment_proof_sub')}
+          </div>
+        </div>
+        <span style={{ fontSize: 18, color: 'var(--text-muted)', flexShrink: 0 }}>›</span>
+      </button>
+
+      {proofWebView && (
+        <PaymentWebView
+          url={proofWebView.url}
+          title={proofWebView.title}
+          subtitle={proofWebView.subtitle}
+          onClose={() => setProofWebView(null)}
+        />
+      )}
 
     </div>
   );

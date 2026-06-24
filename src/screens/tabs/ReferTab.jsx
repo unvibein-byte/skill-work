@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import AppLogo from '../../components/AppLogo';
 
 /* ─── Constants ──────────────────────────────────────────────────────────── */
 const COMMISSION = { L1: 10, L2: 5, L3: 2 };  // % of referred user's earnings
@@ -133,12 +134,12 @@ const ReferTab = ({ userName }) => {
   const [showInvite,    setShowInvite]    = useState(false);
   const [inviteParent,  setInviteParent]  = useState({ id: 'root', name: '' });
   const [copied,        setCopied]        = useState(false);
-  const [toast,         setToast]         = useState('');
-
-  const showToast = (msg) => { setToast(msg); setTimeout(() => setToast(''), 2200); };
+  const showToast = (msg) => {
+    if (import.meta.env.DEV) console.debug('[toast]', msg);
+  };
 
   const handleCopy = () => {
-    navigator.clipboard?.writeText(`Join SkillWork using my code ${myCode} and start earning ₹5,000/day!\nhttps://skillwork.app/join?ref=${myCode}`).catch(()=>{});
+    navigator.clipboard?.writeText(`Join 24hrwork using my code ${myCode} and start earning ₹5,000/day!\nhttps://24hrwork.app/join?ref=${myCode}`).catch(()=>{});
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
     showToast('🔗 Link copied!');
@@ -184,19 +185,15 @@ const ReferTab = ({ userName }) => {
   return (
     <div>
 
-      {/* ── TOAST ── */}
-      {toast && (
-        <div style={{ position:'fixed', top:20, left:'50%', transform:'translateX(-50%)', background:'#1a2040', color:'white', padding:'10px 20px', borderRadius:100, fontSize:13, fontWeight:600, zIndex:999, boxShadow:'0 8px 24px rgba(0,0,0,0.3)', whiteSpace:'nowrap' }}>
-          {toast}
-        </div>
-      )}
-
       {/* ── HERO ── */}
       <div style={{ background:'linear-gradient(160deg,#0f1220 0%,#1a2040 55%,#0d3320 100%)', padding:'28px 20px 52px', position:'relative', overflow:'hidden' }}>
         <div style={{ position:'absolute', top:-30, right:-20, width:140, height:140, borderRadius:'50%', background:'rgba(0,195,126,0.15)' }} />
         <div style={{ position:'absolute', bottom:-30, left:-10, width:100, height:100, borderRadius:'50%', background:'rgba(127,86,217,0.15)' }} />
         <div style={{ position:'relative', zIndex:1 }}>
-          <p style={{ fontSize:11, color:'rgba(255,255,255,0.4)', fontWeight:700, textTransform:'uppercase', letterSpacing:'1px', marginBottom:6 }}>Refer & Earn MLM</p>
+          <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:10 }}>
+            <AppLogo size={36} rounded={10} />
+            <p style={{ fontSize:11, color:'rgba(255,255,255,0.4)', fontWeight:700, textTransform:'uppercase', letterSpacing:'1px', margin:0 }}>Refer & Earn MLM</p>
+          </div>
           <h2 style={{ fontSize:22, fontWeight:900, color:'white', fontFamily:'var(--font-display)', marginBottom:4 }}>Build Your Team 🏆</h2>
           <p style={{ fontSize:13, color:'rgba(255,255,255,0.45)', marginBottom:18, lineHeight:1.6 }}>
             Invite 3 people. Earn commissions from 3 levels deep.
@@ -347,8 +344,8 @@ const ReferTab = ({ userName }) => {
         <div className="card animate-fade-up" style={{ padding:18, marginBottom:24, animationDelay:'0.18s' }}>
           <h3 style={{ fontSize:14, fontWeight:700, fontFamily:'var(--font-display)', marginBottom:14 }}>How Team Income Works</h3>
           {[
-            { icon:'👥', title:'You invite 3 people',                  desc:'They join SkillWork and start completing tasks',     color:'var(--green-light)',        accent:'var(--green)'  },
-            { icon:'💼', title:'They earn from tasks',                 desc:'Each of your 3 members earns from PDF editing work', color:'rgba(67,97,238,0.08)',       accent:'#4361ee'       },
+            { icon:'👥', title:'You invite 3 people',                  desc:'They join 24hrwork and start completing tasks',     color:'var(--green-light)',        accent:'var(--green)'  },
+            { icon:'💼', title:'They earn from tasks',                 desc:'Each of your 3 members earns from 24hrwork tasks', color:'rgba(67,97,238,0.08)',       accent:'#4361ee'       },
             { icon:'💰', title:'You get 10% of their earnings',        desc:'Level 1 earns you 10% commission automatically',     color:'rgba(245,158,11,0.08)',      accent:'#f59e0b'       },
             { icon:'🌳', title:'Your 3 invite 3 more (Level 2)',       desc:'You get 5% from Level 2 members\' task earnings',    color:'rgba(127,86,217,0.08)',      accent:'#7F56D9'       },
             { icon:'🚀', title:'Level 3 adds 2% more',                 desc:'3rd tier gives you 2%  — passive income grows!',     color:'var(--purple-light)',        accent:'#7F56D9'       },

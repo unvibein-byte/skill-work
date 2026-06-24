@@ -306,6 +306,18 @@ async function uploadImage(base64Data){
                 : rejectionReason
         });
 
+        if (paymentStatus === "approved") {
+            notifyApp({
+                type: "verification_complete",
+                success: true,
+                verified: true,
+                paymentId: paymentId,
+                status: "approved",
+                amount: amount,
+                coins: coins || Math.floor(amount)
+            });
+        }
+
         // Listen for any status updates (in case admin overrides)
         listenForVerificationStatus(paymentId);
 
@@ -353,6 +365,13 @@ function notifyApp(data){
     // Method 3: Standard postMessage (for WebView/iframe scenarios)
     if(window.postMessage){
         window.postMessage(message, "*");
+    }
+    try {
+        if(window.parent && window.parent !== window){
+            window.parent.postMessage(message, "*");
+        }
+    } catch (err) {
+        console.log("parent.postMessage failed:", err);
     }
     
     // Method 4: Android/iOS WebView interface (native WebView)
@@ -424,6 +443,7 @@ function listenForVerificationStatus(paymentId){
                     notifyApp({
                         type: "verification_complete",
                         success: true,
+                        verified: true,
                         paymentId: paymentId,
                         status: "approved",
                         amount: data.amount,

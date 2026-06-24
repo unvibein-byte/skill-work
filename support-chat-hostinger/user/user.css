@@ -1,0 +1,58 @@
+@import url('../shared/chat.css');
+
+:root {
+  --shadow: 0 4px 24px rgba(15, 18, 32, 0.08);
+}
+
+.user-app {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  max-width: 520px;
+  margin: 0 auto;
+  background: var(--card);
+  box-shadow: var(--shadow);
+}
+
+.user-header {
+  padding: 14px 16px;
+  background: linear-gradient(135deg, #0f1220, #1a2040);
+  color: #fff;
+  flex-shrink: 0;
+}
+
+.user-header h1 {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 800;
+}
+
+.user-header p {
+  margin: 4px 0 0;
+  font-size: 12px;
+  opacity: 0.85;
+}
+
+.block-banner {
+  background: #fef2f2;
+  color: #b91c1c;
+  padding: 10px 14px;
+  font-size: 12px;
+  font-weight: 600;
+  text-align: center;
+  border-bottom: 1px solid #fecaca;
+  flex-shrink: 0;
+}
+
+.quick-chip:hover {
+  border-color: var(--green);
+  color: var(--green-dark);
+}
+
+.composer input:focus {
+  border-color: var(--green);
+}
+
+.composer button[type='submit'] {
+  background: var(--green);
+}

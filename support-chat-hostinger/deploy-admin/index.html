@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>24hrwork Support — Admin</title>
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-storage-compat.js"></script>
+  <link rel="stylesheet" href="admin.css" />
+</head>
+<body>
+  <div id="loginView" class="login-panel">
+    <h1>🔐 Admin Support</h1>
+    <p>Enter admin PIN from Firebase → config → support → adminPin</p>
+    <input type="password" id="pinInput" placeholder="Admin PIN" autocomplete="current-password" />
+    <button type="button" id="loginBtn">Sign in</button>
+    <p id="loginError" class="login-error hidden"></p>
+  </div>
+
+  <div id="adminApp" class="admin-app hidden">
+    <aside class="admin-sidebar" id="sidebar">
+      <div class="admin-sidebar-header">
+        <h1>Support Inbox</h1>
+        <p style="margin:6px 0 0;font-size:11px;opacity:0.9">Users who messaged · tap to reply</p>
+      </div>
+      <div class="admin-search">
+        <input type="search" id="searchInput" placeholder="Search name or phone…" />
+      </div>
+      <div class="user-list" id="userList"></div>
+    </aside>
+
+    <main class="admin-main" id="mainPanel">
+      <div class="admin-placeholder" id="placeholder">Select a user to view chat</div>
+      <div id="chatPanel" class="hidden" style="display:flex;flex-direction:column;height:100%">
+        <div class="admin-chat-header">
+          <div class="admin-chat-header-text" id="chatHeader">—</div>
+          <button type="button" id="blockBtn" class="block-btn">Block chat</button>
+        </div>
+        <div class="messages" id="messages" style="flex:1"></div>
+        <div class="quick-row" id="quickReplies"></div>
+        <form class="composer" id="composerForm">
+          <button type="button" class="composer-attach" id="attachBtn" title="Send image">📷</button>
+          <input type="file" id="imageInput" accept="image/*" hidden />
+          <input type="text" id="messageInput" placeholder="Reply to user…" autocomplete="off" maxlength="2000" />
+          <button type="submit" id="sendBtn">Send</button>
+        </form>
+      </div>
+    </main>
+  </div>
+
+  <script src="shared/firebase-config.js"></script>
+  <script src="shared/chat-core.js"></script>
+  <script src="admin.js"></script>
+</body>
+</html>
