@@ -1,6 +1,7 @@
 import { useNavigate } from 'react-router-dom';
 import { Crown, FileText, CheckCircle, Clock, ChevronRight } from 'lucide-react';
 import PageTransition from '../components/PageTransition';
+import AppLogo from '../components/AppLogo';
 
 const Dashboard = () => {
   const navigate = useNavigate();
@@ -13,8 +14,8 @@ const Dashboard = () => {
       <div className="flex-between animate-fade-up" style={{ marginBottom: '24px', animationDelay: '0.05s' }}>
         <div>
           <h2 style={{ fontSize: '24px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-             <FileText size={24} color="var(--accent-primary)" />
-             PDF Editor Studio
+             <AppLogo size={28} rounded={8} />
+             24hrwork
           </h2>
           <p style={{ color: 'var(--text-secondary)', fontWeight: '500', marginTop: '4px' }}>Welcome back, Rohit!</p>
         </div>
@@ -55,7 +56,7 @@ const Dashboard = () => {
         {Array.from({ length: 15 }).map((_, idx) => {
           const id = idx + 1;
           const status = id === 1 ? 'active' : 'locked';
-          const reward = 100 + (idx * 5); // Slight reward increase for each
+          const reward = 105 + (idx * 5); // All tasks reward above ₹100
           
           // Generate varied visual headers for the tasks
           const templates = [

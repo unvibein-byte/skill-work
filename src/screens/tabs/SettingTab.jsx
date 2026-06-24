@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useLang } from '../../i18n/LangContext';
 import { signOut } from 'firebase/auth';
-import { auth, getIntentUpiDetails, getProPricing, getKycRequirements, getPaymentMethods, getSupportConfig, preparePaymentOrder, recordSuccessfulPayment, isQrPaymentVerifiedMessage, completeFakeKycPayment, getUserProfile, updateUserProfile, updateUserKycFeePaid, saveUserKycDetails, hasCompletedPremiumPayment, hasCompletedKycPayment, isUserKycFeePaid, isFirebaseConfigured, DEFAULT_PRO_PRICING, DEFAULT_KYC_REQUIREMENTS, DEFAULT_PAYMENT_METHODS } from '../../firebase';
+import { auth, getIntentUpiDetails, getProPricing, getKycRequirements, getPaymentMethods, getSupportConfig, preparePaymentOrder, recordSuccessfulPayment, isQrPaymentVerifiedMessage, completeFakeKycPayment, getUserProfile, updateUserProfile, updateUserKycFeePaid, saveUserKycDetails, hasCompletedKycPayment, isUserKycFeePaid, isFirebaseConfigured, DEFAULT_PRO_PRICING, DEFAULT_KYC_REQUIREMENTS, DEFAULT_PAYMENT_METHODS } from '../../firebase';
 import {
   preserveDeviceLocalKeys,
   restoreDeviceLocalKeys,
@@ -12,6 +12,8 @@ import {
 import { DEVICE_ALREADY_REGISTERED_MESSAGE } from '../../firebase';
 import { QRCodeSVG as QRCode } from 'qrcode.react';
 import PaymentWebView from '../../components/PaymentWebView';
+import PremiumPaymentSheet from '../../components/PremiumPaymentSheet';
+import AppLogo from '../../components/AppLogo';
 import { buildPaymentUrl, openQrPaymentPage, PAYMENT_ORIGIN } from '../../utils/paymentPage';
 import { buildSupportChatUrl } from '../../utils/supportChat';
 
@@ -76,11 +78,10 @@ const SHOW_FAKE_KYC =
 /* ══════════════════════════════════════════════════════════════════════════ */
 const SettingTab = ({ userName, isPro, onUpgrade, onDowngrade }) => {
   const navigate = useNavigate();
-  const { t, isDark, toggleDark } = useLang();
+  const { t } = useLang();
 
   // ── preferences (persisted) ──
   const [notif,     setNotif]     = useState(() => localStorage.getItem('sw_notif')   !== 'false');
-  const [darkHint,  setDarkHint]  = useState(isDark); // synced from context
   const [soundOn,   setSoundOn]   = useState(() => localStorage.getItem('sw_sound')   !== 'false');
   const [language,  setLanguage]  = useState(() => localStorage.getItem('sw_lang')    || 'English');
 
@@ -122,10 +123,8 @@ const SettingTab = ({ userName, isPro, onUpgrade, onDowngrade }) => {
   const [kycPanFile, setKycPanFile] = useState(null);
   const [kycSelfieFile, setKycSelfieFile] = useState(null);
   const [kycSaving, setKycSaving] = useState(false);
-  const [currentPayment, setCurrentPayment] = useState(null); // { id, status, ... }
   const [currentKycPayment, setCurrentKycPayment] = useState(null);
   const [inAppPaymentWebView, setInAppPaymentWebView] = useState(null);
-  const intentVerifyCleanupRef = useRef(null);
   const kycIntentVerifyCleanupRef = useRef(null);
   const kycAadhaarInputRef = useRef(null);
   const kycPanInputRef = useRef(null);
@@ -160,7 +159,6 @@ const SettingTab = ({ userName, isPro, onUpgrade, onDowngrade }) => {
   };
 
   useEffect(() => () => {
-    intentVerifyCleanupRef.current?.();
     kycIntentVerifyCleanupRef.current?.();
   }, []);
 
@@ -211,32 +209,24 @@ const SettingTab = ({ userName, isPro, onUpgrade, onDowngrade }) => {
         }
       }
 
-      // Check if we should open payment sheet automatically
-      const shouldOpenPayment = localStorage.getItem('sw_open_payment');
-      if (shouldOpenPayment === 'true') {
-        localStorage.removeItem('sw_open_payment');
-        setSheet('payment');
-      }
-      const shouldOpenKyc = localStorage.getItem('sw_open_kyc_payment');
-      if (shouldOpenKyc === 'true') {
-        localStorage.removeItem('sw_open_kyc_payment');
-        setSheet('kyc');
-      }
+      openKycIfRequested();
     };
     fetchData();
   }, []);
 
+  const openKycIfRequested = () => {
+    const shouldOpenKyc = localStorage.getItem('sw_open_kyc_payment');
+    if (shouldOpenKyc === 'true') {
+      localStorage.removeItem('sw_open_kyc_payment');
+      setSheet('kyc');
+    }
+  };
+
   useEffect(() => {
-    if (sheet !== 'payment') return;
-    let cancelled = false;
-    Promise.all([getProPricing(), getPaymentMethods()]).then(([p, methods]) => {
-      if (!cancelled) {
-        setProPricing(p);
-        setPaymentMethods(methods);
-      }
-    });
-    return () => { cancelled = true; };
-  }, [sheet]);
+    if (isPro || localStorage.getItem('sw_pro') === 'true') {
+      openKycIfRequested();
+    }
+  }, [isPro]);
 
   useEffect(() => {
     if (sheet !== 'kyc') return;
@@ -379,238 +369,6 @@ const SettingTab = ({ userName, isPro, onUpgrade, onDowngrade }) => {
     localStorage.clear();
     restoreDeviceLocalKeys({ deviceId, devicePhone });
     navigate('/login');
-  };
-
-  const handleUpgrade = async () => {
-    const userId = localStorage.getItem('sw_userId');
-    if (!userId) {
-      showToast('❌ User not logged in');
-      return;
-    }
-
-    // Verify payment before upgrading
-    const hasPayment = await hasCompletedPremiumPayment(userId);
-    if (!hasPayment) {
-      showToast('❌ Payment verification required. Please complete payment first.');
-      return;
-    }
-
-    // Only upgrade if payment is verified
-    onUpgrade();
-    showToast('✅ Upgraded to Pro!');
-  };
-
-  const handlePaymentIntent = async () => {
-    if (!paymentMethods.upiIntentEnabled) {
-      showToast('⚠️ UPI payment is disabled right now');
-      return;
-    }
-
-    const userId = localStorage.getItem('sw_userId');
-    if (!userId) {
-      showToast('❌ User not logged in');
-      return;
-    }
-
-    const pricing = await getProPricing();
-    setProPricing(pricing);
-
-    // Check if user already has completed payment
-    const hasCompleted = await hasCompletedPremiumPayment(userId);
-    if (hasCompleted) {
-      showToast('✅ You already have premium access!');
-      await handleUpgrade();
-      return;
-    }
-
-    const payment = await preparePaymentOrder(userId, pricing.amount, 'intent', 'premium');
-    setCurrentPayment(payment);
-    setPaymentMethod('intent');
-
-    const details = await getIntentUpiDetails();
-    const upiString = `upi://pay?pa=${encodeURIComponent(details.upiId)}&pn=${encodeURIComponent(details.name)}&am=${pricing.amount.toFixed(2)}&cu=${encodeURIComponent(pricing.currency)}&tn=${encodeURIComponent(pricing.description)}`;
-
-    if (intentVerifyCleanupRef.current) {
-      intentVerifyCleanupRef.current();
-      intentVerifyCleanupRef.current = null;
-    }
-
-    const opened = window.open(upiString, '_blank');
-    if (!opened) {
-      window.location.href = upiString;
-    }
-
-    setSheet(null);
-    showToast('Pay in your UPI app. When you return here after paying, Pro will activate.');
-
-    let cancelled = false;
-    let verificationDone = false;
-    let expireTimer;
-    let userLeftForPayment = false;
-
-    const cleanup = () => {
-      if (cancelled) return;
-      cancelled = true;
-      if (expireTimer) clearTimeout(expireTimer);
-      window.removeEventListener('focus', onFocus);
-      document.removeEventListener('visibilitychange', onVisibility);
-      intentVerifyCleanupRef.current = null;
-    };
-
-    // Intent: write to Firestore only after user returns from UPI (success callback).
-    const tryComplete = async () => {
-      if (cancelled || verificationDone) return;
-      if (!userLeftForPayment) return;
-
-      try {
-        if (await hasCompletedPremiumPayment(userId)) {
-          verificationDone = true;
-          await handleUpgrade();
-          cleanup();
-          return;
-        }
-
-        verificationDone = true;
-        await recordSuccessfulPayment(userId, pricing.amount, 'intent', 'premium', payment.id);
-
-        const hasPayment = await hasCompletedPremiumPayment(userId);
-        if (hasPayment) {
-          await handleUpgrade();
-          setCurrentPayment({ ...payment, status: 'completed' });
-          cleanup();
-        } else {
-          verificationDone = false;
-        }
-      } catch (error) {
-        verificationDone = false;
-        console.error('Intent payment verification', error);
-        showToast('❌ Could not confirm payment. Try again.');
-      }
-    };
-
-    const onFocus = () => {
-      setTimeout(tryComplete, 1200);
-    };
-
-    const onVisibility = () => {
-      if (document.visibilityState === 'hidden') {
-        userLeftForPayment = true;
-      } else if (document.visibilityState === 'visible') {
-        setTimeout(tryComplete, 1200);
-      }
-    };
-
-    window.addEventListener('focus', onFocus);
-    document.addEventListener('visibilitychange', onVisibility);
-    expireTimer = setTimeout(cleanup, 15 * 60 * 1000);
-    intentVerifyCleanupRef.current = cleanup;
-  };
-
-  const handlePaymentQR = async () => {
-    if (!paymentMethods.qrEnabled) {
-      showToast('⚠️ QR payment is disabled right now');
-      return;
-    }
-
-    const userId = localStorage.getItem('sw_userId');
-    if (!userId) {
-      showToast('❌ User not logged in');
-      return;
-    }
-
-    const pricing = await getProPricing();
-    setProPricing(pricing);
-
-    // Check if user already has completed payment
-    const hasCompleted = await hasCompletedPremiumPayment(userId);
-    if (hasCompleted) {
-      showToast('✅ You already have premium access!');
-      await handleUpgrade();
-      return;
-    }
-
-    const payment = await preparePaymentOrder(userId, pricing.amount, 'qr', 'premium');
-    setCurrentPayment(payment);
-    setPaymentMethod('qr');
-
-    if (!launchQrPaymentPage(userId, pricing.amount, payment.id, 'Pro payment')) {
-      showToast('⚠️ Could not open payment page');
-      return;
-    }
-
-    setSheet('qrPayment');
-
-    const finalizePremiumQrSuccess = async () => {
-      await recordSuccessfulPayment(userId, pricing.amount, 'qr', 'premium', payment.id);
-
-      const hasPayment = await hasCompletedPremiumPayment(userId);
-      if (!hasPayment) {
-        return false;
-      }
-
-      closeInAppPaymentWebView();
-      await handleUpgrade();
-      setSheet(null);
-      showToast('✅ Payment verified! Upgraded to Pro!');
-      return true;
-    };
-
-    const autoVerifyPayment = async () => {
-      try {
-        if (!(await hasCompletedPremiumPayment(userId))) {
-          return false;
-        }
-        clearInterval(pollInterval);
-        window.removeEventListener('message', handleMessage);
-        return finalizePremiumQrSuccess();
-      } catch (error) {
-        console.error('Error auto-verifying payment', error);
-        return false;
-      }
-    };
-
-    const handleMessage = async (event) => {
-      if (event.origin !== PAYMENT_ORIGIN) {
-        return;
-      }
-
-      try {
-        let data = event.data;
-        if (typeof data === 'string') {
-          data = JSON.parse(data);
-        }
-
-        if (isQrPaymentVerifiedMessage(data)) {
-          clearInterval(pollInterval);
-          window.removeEventListener('message', handleMessage);
-          closeInAppPaymentWebView();
-          await finalizePremiumQrSuccess();
-        } else if (data.type === 'verification_complete' && data.success === false) {
-          clearInterval(pollInterval);
-          window.removeEventListener('message', handleMessage);
-          closeInAppPaymentWebView();
-          showToast(`❌ Payment verification failed: ${data.message || 'Unknown error'}`);
-        }
-      } catch (error) {
-        console.error('Error handling payment message', error);
-      }
-    };
-
-    window.addEventListener('message', handleMessage);
-
-    const pollInterval = setInterval(async () => {
-      const verified = await autoVerifyPayment();
-      if (verified) {
-        closeInAppPaymentWebView();
-      }
-    }, 3000);
-
-    setTimeout(() => {
-      clearInterval(pollInterval);
-      window.removeEventListener('message', handleMessage);
-    }, 15 * 60 * 1000);
-
-    showToast('📱 Complete payment in the app. We will verify automatically after upload.');
   };
 
   const handleKycPaymentIntent = async () => {
@@ -937,6 +695,19 @@ const SettingTab = ({ userName, isPro, onUpgrade, onDowngrade }) => {
     catch { return 0; }
   })();
 
+  const isProUser = isPro || localStorage.getItem('sw_pro') === 'true';
+  const canAccessKycPayment = isProUser || walletBalance >= kycRequirements.balanceThreshold || SHOW_FAKE_KYC;
+
+  const kycMenuSub = kycApproved
+    ? 'Verified'
+    : kycSubmitted
+      ? 'Under review'
+      : kycFeePaid
+        ? 'Step 2: Upload Aadhaar & PAN'
+        : canAccessKycPayment
+          ? `Step 1: Pay ₹${kycRequirements.feeAmount} fee`
+          : 'Required for withdrawals';
+
   return (
     <div style={{ paddingBottom:32 }}>
 
@@ -951,10 +722,13 @@ const SettingTab = ({ userName, isPro, onUpgrade, onDowngrade }) => {
           </div>
           <div>
             <div style={{ fontSize:18, fontWeight:800, color:'white', fontFamily:'var(--font-display)' }}>{name || userName}</div>
-            <div style={{ fontSize:12, color:'rgba(255,255,255,0.45)', marginTop:3 }}>SkillWork Member</div>
+            <div style={{ fontSize:12, color:'rgba(255,255,255,0.45)', marginTop:3, display:'flex', alignItems:'center', gap:6 }}>
+              <AppLogo size={16} rounded={4} />
+              24hrwork Member
+            </div>
             <div style={{ display:'flex', gap:6, marginTop:8, flexWrap:'wrap' }}>
-              <div style={{ background: isPro ? 'rgba(127,86,217,0.25)' : 'rgba(0,195,126,0.15)', border:`1px solid ${isPro ? 'rgba(127,86,217,0.4)' : 'rgba(0,195,126,0.3)'}`, borderRadius:100, padding:'3px 10px' }}>
-                <span style={{ fontSize:11, color: isPro ? '#a78bfa' : '#4ade80', fontWeight:700 }}>{isPro ? '👑 Pro Member' : '🆓 Free Plan'}</span>
+              <div style={{ background: isProUser ? 'rgba(127,86,217,0.25)' : 'rgba(0,195,126,0.15)', border:`1px solid ${isProUser ? 'rgba(127,86,217,0.4)' : 'rgba(0,195,126,0.3)'}`, borderRadius:100, padding:'3px 10px' }}>
+                <span style={{ fontSize:11, color: isProUser ? '#a78bfa' : '#4ade80', fontWeight:700 }}>{isProUser ? '👑 Pro Member' : '🆓 Free Plan'}</span>
               </div>
               <div style={{ background:'rgba(255,255,255,0.08)', border:'1px solid rgba(255,255,255,0.1)', borderRadius:100, padding:'3px 10px' }}>
                 <span style={{ fontSize:11, color:'rgba(255,255,255,0.6)', fontWeight:600 }}>✅ {tasksDone} tasks</span>
@@ -972,7 +746,7 @@ const SettingTab = ({ userName, isPro, onUpgrade, onDowngrade }) => {
             {[
               { label:'Earned',  val:`₹${totalEarned.toLocaleString()}`, color:'var(--green)'  },
               { label:'Tasks',   val:tasksDone,         color:'#4361ee'        },
-              { label:'Plan',    val: isPro ? 'Pro' : 'Free',  color: isPro ? '#7F56D9' : 'var(--green)' },
+              { label:'Plan',    val: isProUser ? 'Pro' : 'Free',  color: isProUser ? '#7F56D9' : 'var(--green)' },
             ].map((s, i) => (
               <div key={i} style={{ padding:'14px 12px', textAlign:'center', borderRight: i < 2 ? '1px solid var(--border-color)' : 'none' }}>
                 <div style={{ fontSize:18, fontWeight:900, color:s.color, fontFamily:'var(--font-display)' }}>{s.val}</div>
@@ -982,6 +756,42 @@ const SettingTab = ({ userName, isPro, onUpgrade, onDowngrade }) => {
           </div>
         </div>
 
+        {/* ── KYC ALERT (Premium users) ── */}
+        {isProUser && !kycApproved && (
+          <button
+            type="button"
+            onClick={() => setSheet('kyc')}
+            className="card animate-fade-up"
+            style={{
+              width: '100%',
+              textAlign: 'left',
+              cursor: 'pointer',
+              border: '1.5px solid rgba(245,158,11,0.45)',
+              background: 'linear-gradient(135deg, rgba(245,158,11,0.12), rgba(180,83,9,0.06))',
+              padding: '16px 18px',
+              marginBottom: 14,
+              animationDelay: '0.05s',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+              <div style={{ width: 48, height: 48, borderRadius: 14, background: 'rgba(245,158,11,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 24, flexShrink: 0 }}>
+                📱
+              </div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 15, fontWeight: 800, color: '#b45309', fontFamily: 'var(--font-display)', marginBottom: 4 }}>
+                  {kycFeePaid ? 'Complete KYC documents' : 'Complete KYC verification'}
+                </div>
+                <div style={{ fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.5 }}>
+                  {kycMenuSub} — required to withdraw your earnings.
+                </div>
+              </div>
+              <span style={{ fontSize: 11, fontWeight: 800, background: 'linear-gradient(135deg,#f59e0b,#b45309)', color: 'white', padding: '6px 12px', borderRadius: 100, flexShrink: 0 }}>
+                {kycSubmitted ? 'Pending' : 'Start'}
+              </span>
+            </div>
+          </button>
+        )}
+
         {/* ── ACCOUNT ── */}
         <div className="card animate-fade-up" style={{ overflow:'hidden', marginBottom:14, animationDelay:'0.06s' }}>
           <Section label={t('account')} />
@@ -989,32 +799,37 @@ const SettingTab = ({ userName, isPro, onUpgrade, onDowngrade }) => {
           <MenuItem icon="🏦" label={t('bank_upi')}     sub={upi || 'Not set'}           onClick={() => setSheet('bank')}     accent="#027A48" />
           <MenuItem icon="🧾" label="User Details" sub={`Wallet ₹${walletBalance.toFixed(2)} · Earned ₹${totalEarned.toFixed(2)}`} onClick={() => setSheet('userDetails')} accent="#7F56D9" />
           <MenuItem icon="🔒" label={t('change_password')} sub="Update your login password" onClick={() => setSheet('password')} accent="#7F56D9" />
-          <MenuItem
-            icon="📱"
-            label={t('kyc')}
-            sub={
-              kycApproved
-                ? 'Verified'
-                : kycSubmitted
-                  ? 'Under review'
-                  : kycFeePaid
-                    ? 'Step 2: Upload Aadhaar & PAN'
-                    : walletBalance >= kycRequirements.balanceThreshold
-                      ? `Step 1: Pay ₹${kycRequirements.feeAmount} fee`
-                      : 'Required for withdrawals'
-            }
-            onClick={() => setSheet('kyc')}
-            accent="#B54708"
-          />
+          {isProUser && (
+            <MenuItem
+              icon="📱"
+              label={t('kyc')}
+              sub={kycMenuSub}
+              onClick={() => setSheet('kyc')}
+              accent="#B54708"
+              rightEl={!kycApproved ? <span style={{ fontSize:11, fontWeight:800, background:'linear-gradient(135deg,#f59e0b,#b45309)', color:'white', padding:'4px 10px', borderRadius:100 }}>!</span> : null}
+            />
+          )}
         </div>
 
         {/* ── SUBSCRIPTION ── */}
         <div className="card animate-fade-up" style={{ overflow:'hidden', marginBottom:14, animationDelay:'0.1s' }}>
           <Section label={t('subscription')} />
-          {isPro ? (
+          {isProUser ? (
+            <>
             <MenuItem icon="👑" label={t('pro_active')} sub="Lifetime · All features unlocked"
               rightEl={<span style={{ fontSize:11, fontWeight:700, color:'#7F56D9', background:'rgba(127,86,217,0.1)', padding:'4px 10px', borderRadius:100 }}>Active</span>}
               accent="#7F56D9" onClick={() => setSheet('downgrade')} />
+            {!kycApproved && (
+              <MenuItem
+                icon="📱"
+                label={t('kyc')}
+                sub={kycMenuSub}
+                rightEl={<span style={{ fontSize:11, fontWeight:800, background:'linear-gradient(135deg,#f59e0b,#b45309)', color:'white', padding:'4px 12px', borderRadius:100 }}>Complete</span>}
+                onClick={() => setSheet('kyc')}
+                accent="#f59e0b"
+              />
+            )}
+            </>
           ) : (
             <MenuItem icon="🚀" label={t('upgrade_to_pro')} sub={`₹${proPricing.amount} ${proPricing.description}`}
               rightEl={<span style={{ fontSize:11, fontWeight:800, background:'var(--grad-purple)', color:'white', padding:'4px 12px', borderRadius:100 }}>Upgrade</span>}
@@ -1034,14 +849,6 @@ const SettingTab = ({ userName, isPro, onUpgrade, onDowngrade }) => {
             <Toggle value={notif} onChange={v => toggle('sw_notif', v, setNotif)} />
           </div>
           <div style={{ display:'flex', alignItems:'center', gap:14, padding:'13px 16px', borderBottom:'1px solid var(--border-color)' }}>
-            <div style={{ width:36, height:36, borderRadius:11, background:'rgba(100,100,120,0.1)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:18 }}>🌙</div>
-            <div style={{ flex:1 }}>
-              <div style={{ fontSize:14, fontWeight:600 }}>{t('dark_mode')}</div>
-              <div style={{ fontSize:11, color:'var(--text-muted)', marginTop:1 }}>Switch app to dark theme</div>
-            </div>
-            <Toggle value={isDark} onChange={v => { toggleDark(v); setDarkHint(v); }} />
-          </div>
-          <div style={{ display:'flex', alignItems:'center', gap:14, padding:'13px 16px', borderBottom:'1px solid var(--border-color)' }}>
             <div style={{ width:36, height:36, borderRadius:11, background:'rgba(245,158,11,0.1)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:18 }}>🔊</div>
             <div style={{ flex:1 }}>
               <div style={{ fontSize:14, fontWeight:600 }}>{t('sound')}</div>
@@ -1058,7 +865,7 @@ const SettingTab = ({ userName, isPro, onUpgrade, onDowngrade }) => {
           <MenuItem icon="❓" label={t('help_support')}  sub="FAQs and contact us"          onClick={() => setSheet('support')} accent="#4361ee" />
           <MenuItem icon="📋" label={t('terms')}        sub="Read our policies"            onClick={() => setSheet('terms')}   accent="#7F56D9" />
           <MenuItem icon="⭐" label={t('rate_app')}     sub="Tell us what you think"       onClick={() => showToast('⭐ Thank you for rating us!')} accent="#f59e0b" />
-          <MenuItem icon="📤" label={t('share_app')}    sub="Invite friends to SkillWork"  onClick={() => showToast('🔗 Link copied to clipboard!')} accent="#027A48" />
+          <MenuItem icon="📤" label={t('share_app')}    sub="Invite friends to 24hrwork"  onClick={() => showToast('🔗 Link copied to clipboard!')} accent="#027A48" />
         </div>
 
         {/* ── DANGER ── */}
@@ -1067,7 +874,10 @@ const SettingTab = ({ userName, isPro, onUpgrade, onDowngrade }) => {
           <MenuItem icon="🚪" label={t('log_out')}         danger onClick={() => setSheet('logoutConfirm')} />
           <MenuItem icon="🗑️" label={t('delete_account')} danger onClick={() => setSheet('deleteConfirm')} />
         </div>
-        <p style={{ textAlign:'center', color:'var(--text-muted)', fontSize:12, marginBottom:8 }}>{t('skillwork_version')}</p>
+        <div style={{ display:'flex', flexDirection:'column', alignItems:'center', gap:8, marginBottom:8 }}>
+          <AppLogo size={32} rounded={8} />
+          <p style={{ textAlign:'center', color:'var(--text-muted)', fontSize:12, margin:0 }}>{t('skillwork_version')}</p>
+        </div>
       </div>
 
       {/* ══ SHEETS ══════════════════════════════════════════════════════════ */}
@@ -1141,13 +951,13 @@ const SettingTab = ({ userName, isPro, onUpgrade, onDowngrade }) => {
               </div>
             )}
 
-            {!kycFeePaid && walletBalance < kycRequirements.balanceThreshold && !SHOW_FAKE_KYC && (
+            {!kycFeePaid && !canAccessKycPayment && (
               <div style={{ background:'#f8f9fc', border:'1px solid var(--border-color)', borderRadius:12, padding:'14px 16px', marginBottom:16, fontSize:13, color:'var(--text-secondary)', lineHeight:1.65 }}>
-                Complete more tasks to reach <strong>₹{kycRequirements.balanceThreshold.toLocaleString('en-IN')}</strong> wallet balance. KYC fee payment unlocks after that.
+                Complete more tasks to reach <strong>₹{kycRequirements.balanceThreshold.toLocaleString('en-IN')}</strong> wallet balance, or upgrade to <strong>Premium</strong> to unlock KYC now.
               </div>
             )}
 
-            {!kycFeePaid && (walletBalance >= kycRequirements.balanceThreshold || SHOW_FAKE_KYC) && (
+            {!kycFeePaid && canAccessKycPayment && (
               <div style={{ background:'rgba(245,158,11,0.08)', border:'1px solid rgba(245,158,11,0.35)', borderRadius:14, padding:'14px 16px', marginBottom:18, textAlign:'left' }}>
                 <h4 style={{ fontSize:15, fontWeight:800, margin:'0 0 8px', fontFamily:'var(--font-display)' }}>Step 1 — Pay KYC fee</h4>
                 <p style={{ fontSize:13, color:'var(--text-primary)', lineHeight:1.65, margin:0 }}>
@@ -1160,7 +970,7 @@ const SettingTab = ({ userName, isPro, onUpgrade, onDowngrade }) => {
                     onClick={handleKycPaymentIntent}
                     style={{ width:'100%', padding:'14px', borderRadius:12, background:'var(--green-light)', border:'1.5px solid var(--green-border)', fontFamily:'var(--font-sans)', fontWeight:700, fontSize:14, color:'var(--green)', cursor:'pointer' }}
                   >
-                    📱 Pay ₹{kycRequirements.feeAmount} (UPI Intent)
+                    📱 Pay ₹{kycRequirements.feeAmount} (UPI)
                   </button>
                   )}
                   {paymentMethods.qrEnabled && (
@@ -1345,7 +1155,7 @@ const SettingTab = ({ userName, isPro, onUpgrade, onDowngrade }) => {
             { q:'How do I withdraw my earnings?',   a:'Go to Home → Withdraw. You need at least ₹500 and verified KYC.' },
             { q:'When will my task earnings show?',  a:'Earnings are credited within 24 hours after QA approval of your submitted PDF.' },
             { q:'My uploaded PDF was rejected?',    a:'Common reasons: incomplete edits, wrong format, or unreadable content. Redo and resubmit.' },
-            { q:'How do I contact support?',        a:'Email us at support@skillwork.in or WhatsApp +91-9876543210 (10am–6pm IST).' },
+            { q:'How do I contact support?',        a:'Email us at support@24hrwork.in or WhatsApp +91-9876543210 (10am–6pm IST).' },
           ].map((f, i) => (
             <div key={i} style={{ marginBottom:14 }}>
               <div style={{ fontSize:13, fontWeight:700, color:'var(--text-primary)', marginBottom:5 }}>Q: {f.q}</div>
@@ -1362,7 +1172,7 @@ const SettingTab = ({ userName, isPro, onUpgrade, onDowngrade }) => {
       {sheet === 'terms' && (
         <Sheet title="📋 Terms & Privacy" onClose={() => setSheet(null)}>
           {[
-            { h:'Terms of Service', p:'By using SkillWork, you agree to complete PDF editing tasks honestly and to the best of your ability. Fraudulent submissions will result in account suspension.' },
+            { h:'Terms of Service', p:'By using 24hrwork, you agree to complete tasks honestly and to the best of your ability. Fraudulent submissions will result in account suspension.' },
             { h:'Privacy Policy',   p:'We collect only the information necessary to operate the service (name, phone, payment details). We never sell your data to third parties.' },
             { h:'Payment Policy',   p:'Earnings are credited within 24 hours (Pro) or 48 hours (Free) of QA approval. Minimum withdrawal is ₹500 with verified KYC.' },
             { h:'Refund Policy',    p:'Pro plan upgrades are non-refundable. However, if you face issues, contact support within 7 days for resolution.' },
@@ -1434,86 +1244,15 @@ const SettingTab = ({ userName, isPro, onUpgrade, onDowngrade }) => {
       )}
 
       {/* Payment Sheet */}
-      {sheet === 'payment' && (
-        <Sheet title="💳 Upgrade to Pro" onClose={() => setSheet(null)}>
-          <div style={{ textAlign:'center', padding:'8px 0' }}>
-            <div style={{ fontSize:48, marginBottom:12 }}>👑</div>
-            <h4 style={{ fontSize:16, fontWeight:800, marginBottom:8, fontFamily:'var(--font-display)' }}>Lifetime Pro Access</h4>
-            <p style={{ fontSize:13, color:'var(--text-secondary)', lineHeight:1.7, marginBottom:20 }}>
-              Get unlimited tasks, priority support, and premium features for just ₹{proPricing.amount}.
-            </p>
-            <div style={{ display:'grid', gap:12 }}>
-              {paymentMethods.upiIntentEnabled && (
-              <button
-                onClick={handlePaymentIntent}
-                style={{ width:'100%', padding:'14px', borderRadius:12, background:'var(--green-light)', border:'1.5px solid var(--green-border)', fontFamily:'var(--font-sans)', fontWeight:700, fontSize:14, color:'var(--green)', cursor:'pointer', transition:'all 0.2s' }}
-                onMouseOver={e => { e.currentTarget.style.borderColor='var(--green)'; e.currentTarget.style.background='var(--green-light)'; }}
-                onMouseOut={e => { e.currentTarget.style.borderColor='var(--green-border)'; e.currentTarget.style.background='var(--green-light)'; }}>
-                📱 Pay ₹{proPricing.amount} (UPI Intent)
-              </button>
-              )}
-              {paymentMethods.qrEnabled && (
-              <button
-                onClick={handlePaymentQR}
-                style={{ width:'100%', padding:'14px', borderRadius:12, background:'rgba(127,86,217,0.1)', border:'1.5px solid rgba(127,86,217,0.3)', fontFamily:'var(--font-sans)', fontWeight:700, fontSize:14, color:'#7F56D9', cursor:'pointer', transition:'all 0.2s' }}
-                onMouseOver={e => { e.currentTarget.style.borderColor='rgba(127,86,217,0.5)'; e.currentTarget.style.background='rgba(127,86,217,0.15)'; }}
-                onMouseOut={e => { e.currentTarget.style.borderColor='rgba(127,86,217,0.3)'; e.currentTarget.style.background='rgba(127,86,217,0.1)'; }}>
-                📷 Pay via QR Code
-              </button>
-              )}
-              {!paymentMethods.upiIntentEnabled && !paymentMethods.qrEnabled && (
-                <p style={{ fontSize:13, color:'var(--text-secondary)', lineHeight:1.6, margin:0 }}>
-                  No payment methods are enabled. Turn on <strong>upiIntentEnabled</strong> or <strong>qrEnabled</strong> in Firebase → <strong>config/payment_methods</strong>.
-                </p>
-              )}
-            </div>
-          </div>
-        </Sheet>
-      )}
-
-      {/* QR Payment Status Sheet - Shows when payment page is opened */}
-      {sheet === 'qrPayment' && currentPayment && (
-        <Sheet title="📷 Payment Verification" onClose={() => setSheet(null)}>
-          <div style={{ textAlign:'center', padding:'8px 0' }}>
-            <div style={{ fontSize:48, marginBottom:12 }}>💳</div>
-            <h4 style={{ fontSize:16, fontWeight:800, marginBottom:8, fontFamily:'var(--font-display)' }}>Payment Open In App</h4>
-            <p style={{ fontSize:13, color:'var(--text-secondary)', lineHeight:1.7, marginBottom:20 }}>
-              Complete your payment in the in-app page and upload the screenshot for verification.
-              <br /><br />
-              <strong>Amount:</strong> ₹{proPricing.amount}<br />
-              <strong>Payment ID:</strong> {currentPayment.id.substring(0, 12)}...
-            </p>
-            <div style={{ background:'rgba(127,86,217,0.1)', border:'1px solid rgba(127,86,217,0.3)', borderRadius:12, padding:'12px', marginBottom:16, fontSize:12, color:'var(--text-secondary)' }}>
-              <div style={{ fontWeight:700, marginBottom:4 }}>📋 Instructions:</div>
-              <div style={{ textAlign:'left', lineHeight:1.6 }}>
-                1. Scan the QR code on the payment page<br />
-                2. Complete payment in your UPI app<br />
-                3. Take a screenshot of payment confirmation<br />
-                4. Upload screenshot on the payment page<br />
-                5. Wait for automatic verification
-              </div>
-            </div>
-            <button
-              onClick={() => {
-                const userId = localStorage.getItem('sw_userId');
-                if (launchQrPaymentPage(userId, proPricing.amount, currentPayment.id, 'Pro payment')) {
-                  showToast('📱 Payment opened in app');
-                } else {
-                  showToast('⚠️ Could not open payment page');
-                }
-              }}
-              className="btn-purple"
-              style={{ width:'100%', borderRadius:12, marginBottom:10 }}>
-              🔄 Open Payment In App
-            </button>
-            <button
-              onClick={() => setSheet(null)}
-              style={{ width:'100%', padding:'12px', borderRadius:12, background:'transparent', border:'1px solid var(--border-color)', fontFamily:'var(--font-sans)', fontWeight:600, fontSize:14, color:'var(--text-secondary)', cursor:'pointer' }}>
-              Close (Payment will verify automatically)
-            </button>
-          </div>
-        </Sheet>
-      )}
+      <PremiumPaymentSheet
+        open={sheet === 'payment'}
+        onClose={() => setSheet(null)}
+        onUpgrade={onUpgrade}
+        onAfterUpgrade={() => {
+          if (!kycApproved && !kycFeePaid) setSheet('kyc');
+        }}
+        proPriceAmount={proPricing.amount}
+      />
 
       {inAppPaymentWebView && (
         <PaymentWebView

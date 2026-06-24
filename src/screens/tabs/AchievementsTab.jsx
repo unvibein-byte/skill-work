@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import AppLogo from '../../components/AppLogo';
 
 /* ─── Rarity config ──────────────────────────────────────────────────────── */
 const RARITY = {
@@ -162,7 +163,10 @@ const AchievementsTab = ({ isPro, totalEarned = 0, walletBalance = 0 }) => {
         <div style={{ position: 'absolute', bottom: -30, left: -20, width: 100, height: 100, borderRadius: '50%', background: 'rgba(127,86,217,0.2)' }} />
 
         <div style={{ position: 'relative', zIndex: 1 }}>
-          <p style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '1px', marginBottom: 6 }}>Your Progress</p>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
+            <AppLogo size={36} rounded={10} />
+            <p style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '1px', margin: 0 }}>Your Progress</p>
+          </div>
           <h2 style={{ fontSize: 22, fontWeight: 900, color: 'white', fontFamily: 'var(--font-display)', marginBottom: 18 }}>🏆 Achievements</h2>
 
           {/* Overall progress ring simulation */}
@@ -264,7 +268,7 @@ const AchievementsTab = ({ isPro, totalEarned = 0, walletBalance = 0 }) => {
               All Achieved!
             </div>
             <div style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.7 }}>
-              Legendary status unlocked. You are a SkillWork Master! 🌟
+              Legendary status unlocked. You are a 24hrwork Master! 🌟
             </div>
           </div>
         )}

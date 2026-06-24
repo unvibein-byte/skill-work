@@ -1,11 +1,25 @@
-import { useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
+import { Capacitor } from '@capacitor/core';
+import { EmbeddedWebView } from '../plugins/embeddedWebView';
+import { isIframeEmbeddableUrl } from '../utils/embeddableUrl';
 
 /**
- * Full-screen in-app WebView (iframe) for QR payment on Capacitor.
- * Keeps the user inside the app instead of an external browser tab.
+ * Full-screen in-app WebView for payments and external pages on Capacitor.
+ * Embeddable URLs use an iframe; blocked hosts (e.g. Google Sites) use a native WebView below the header.
  */
 const PaymentWebView = ({ url, title = 'Payment', subtitle, onClose }) => {
   const iframeRef = useRef(null);
+  const headerRef = useRef(null);
+  const useNativeEmbed = Capacitor.isNativePlatform() && !isIframeEmbeddableUrl(url);
+
+  const closeNativeEmbed = useCallback(async () => {
+    if (!useNativeEmbed) return;
+    try {
+      await EmbeddedWebView.close();
+    } catch {
+      // Plugin may already be closed.
+    }
+  }, [useNativeEmbed]);
 
   useEffect(() => {
     const prevOverflow = document.body.style.overflow;
@@ -14,6 +28,38 @@ const PaymentWebView = ({ url, title = 'Payment', subtitle, onClose }) => {
       document.body.style.overflow = prevOverflow;
     };
   }, []);
+
+  useEffect(() => {
+    if (!useNativeEmbed) return undefined;
+
+    let cancelled = false;
+
+    const openNativeEmbed = async () => {
+      await new Promise((resolve) => requestAnimationFrame(resolve));
+      if (cancelled) return;
+
+      const headerHeight = headerRef.current?.getBoundingClientRect().height ?? 56;
+      const topPx = Math.round(headerHeight * (window.devicePixelRatio || 1));
+
+      try {
+        await EmbeddedWebView.open({ url, topPx });
+      } catch (err) {
+        console.error('EmbeddedWebView open failed', err);
+      }
+    };
+
+    openNativeEmbed();
+
+    return () => {
+      cancelled = true;
+      closeNativeEmbed();
+    };
+  }, [url, useNativeEmbed, closeNativeEmbed]);
+
+  const handleClose = async () => {
+    await closeNativeEmbed();
+    onClose();
+  };
 
   return (
     <div
@@ -25,10 +71,12 @@ const PaymentWebView = ({ url, title = 'Payment', subtitle, onClose }) => {
         zIndex: 20000,
         display: 'flex',
         flexDirection: 'column',
-        background: '#fff',
+        background: useNativeEmbed ? 'transparent' : '#fff',
+        pointerEvents: useNativeEmbed ? 'none' : 'auto',
       }}
     >
       <div
+        ref={headerRef}
         style={{
           display: 'flex',
           alignItems: 'center',
@@ -37,6 +85,7 @@ const PaymentWebView = ({ url, title = 'Payment', subtitle, onClose }) => {
           borderBottom: '1px solid var(--border-color, #e4e7f0)',
           background: '#f8f9fc',
           flexShrink: 0,
+          pointerEvents: 'auto',
         }}
       >
         <div style={{ minWidth: 0, flex: 1, paddingRight: 12 }}>
@@ -51,7 +100,7 @@ const PaymentWebView = ({ url, title = 'Payment', subtitle, onClose }) => {
         </div>
         <button
           type="button"
-          onClick={onClose}
+          onClick={handleClose}
           style={{
             width: 36,
             height: 36,
@@ -64,24 +113,28 @@ const PaymentWebView = ({ url, title = 'Payment', subtitle, onClose }) => {
             color: '#5a6480',
             flexShrink: 0,
           }}
-          aria-label="Close payment"
+          aria-label="Close"
         >
           ✕
         </button>
       </div>
 
-      <iframe
-        ref={iframeRef}
-        title={title}
-        src={url}
-        style={{
-          flex: 1,
-          width: '100%',
-          border: 'none',
-          background: '#fff',
-        }}
-        allow="payment *; clipboard-write"
-      />
+      {useNativeEmbed ? (
+        <div style={{ flex: 1, background: 'transparent' }} aria-hidden="true" />
+      ) : (
+        <iframe
+          ref={iframeRef}
+          title={title}
+          src={url}
+          style={{
+            flex: 1,
+            width: '100%',
+            border: 'none',
+            background: '#fff',
+          }}
+          allow="payment *; clipboard-write"
+        />
+      )}
     </div>
   );
 };

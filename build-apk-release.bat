@@ -1,6 +1,6 @@
 @echo off
 echo ========================================
-echo   Building SkillWork Release APK
+echo   Building 24hrwork Release APK
 echo ========================================
 echo.
 echo NOTE: This requires a keystore file for signing.

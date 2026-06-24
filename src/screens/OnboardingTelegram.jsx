@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Send, ArrowRight } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { getTelegramConfig, DEFAULT_TELEGRAM_CONFIG } from '../firebase';
+import AppLogo from '../components/AppLogo';
 
 const OnboardingTelegram = () => {
     const navigate = useNavigate();
@@ -57,8 +58,8 @@ const OnboardingTelegram = () => {
                     transition={{ duration: 0.5, delay: 0.1 }}
                     style={{ position: 'relative', zIndex: 1 }}
                 >
-                    <div style={{ width: 56, height: 56, background: 'linear-gradient(135deg,#3b82f6,#60a5fa)', borderRadius: 18, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', boxShadow: '0 8px 24px rgba(59,130,246,0.4)', marginBottom: 18 }}>
-                        <Send size={28} />
+                    <div style={{ marginBottom: 18 }}>
+                        <AppLogo size={56} rounded={18} withBackground withGlow />
                     </div>
                     <h1 style={{ fontSize: 26, fontWeight: 900, color: 'white', fontFamily: "'Outfit',sans-serif", letterSpacing: '-0.3px', marginBottom: 8 }}>
                         Join Community

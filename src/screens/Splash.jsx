@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { FileText } from 'lucide-react';
 import { motion } from 'framer-motion';
+import AppLogo from '../components/AppLogo';
 import { getPostSplashPath } from '../utils/sessionRoute';
 import { checkUserAccountStatus, isFirebaseConfigured } from '../firebase';
 import { clearUserSession, setStoredBlockMessage } from '../utils/accountSession';
@@ -55,12 +55,10 @@ const Splash = () => {
           animate={{ y: [0, -10, 0] }}
           transition={{ repeat: Infinity, duration: 2, ease: "easeInOut" }}
         >
-          <div style={{ background: 'var(--accent-gradient)', padding: '24px', borderRadius: '24px', boxShadow: '0 8px 32px rgba(99, 102, 241, 0.4)' }}>
-            <FileText size={64} color="white" />
-          </div>
+          <AppLogo size={72} rounded="50%" />
         </motion.div>
-        <h1 className="text-gradient" style={{ fontSize: '32px', marginTop: '16px' }}>PDF Task App</h1>
-        <p style={{ color: 'var(--text-secondary)' }}>Earn easily by editing PDFs</p>
+        <h1 className="text-gradient" style={{ fontSize: '32px', marginTop: '16px' }}>24hrwork</h1>
+        <p style={{ color: 'var(--text-secondary)' }}>Complete tasks and earn money</p>
       </motion.div>
     </div>
   );

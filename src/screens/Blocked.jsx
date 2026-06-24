@@ -2,6 +2,7 @@ import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { getStoredBlockMessage, clearUserSession } from '../utils/accountSession';
 import { DEFAULT_USER_BLOCKED_MESSAGE } from '../firebase';
+import AppLogo from '../components/AppLogo';
 
 const Blocked = () => {
   const navigate = useNavigate();
@@ -40,6 +41,9 @@ const Blocked = () => {
           boxShadow: '0 8px 32px rgba(15,18,32,0.08)',
         }}
       >
+        <div style={{ marginBottom: 16 }}>
+          <AppLogo size={56} rounded={14} />
+        </div>
         <motion.div style={{ fontSize: 48, marginBottom: 16 }}>🚫</motion.div>
         <h1 style={{ fontSize: 22, fontWeight: 800, marginBottom: 10, fontFamily: "'Outfit',sans-serif" }}>
           Account Blocked

@@ -14,6 +14,8 @@ import { getUserProfile, isUserPremium, updateUserTaskCount, applyWalletTransact
 import { sumLocalTaskRewards } from '../utils/wallet';
 import { doc, onSnapshot } from 'firebase/firestore';
 import { clearUserSession, setStoredBlockMessage } from '../utils/accountSession';
+import AppLogo from '../components/AppLogo';
+import PremiumPaymentSheet from '../components/PremiumPaymentSheet';
 
 const SHOW_FAKE_KYC =
   import.meta.env.DEV || import.meta.env.VITE_ENABLE_FAKE_KYC === 'true';
@@ -55,6 +57,7 @@ const MainInner = () => {
   const [activeBottom, setActiveBottom] = useState('home');
   const [isPro, setIsPro] = useState(() => localStorage.getItem('sw_pro') === 'true');
   const [showWithdraw, setShowWithdraw] = useState(false);
+  const [showPaymentSheet, setShowPaymentSheet] = useState(false);
 
   const [balance, setBalance] = useState(() =>
     parseFloat(localStorage.getItem('sw_balance') || '0')
@@ -321,6 +324,17 @@ const MainInner = () => {
         console.error('Failed to sync premium status to Firebase', error);
       }
     }
+
+    try {
+      const kycPaid = await isUserKycFeePaid(userId);
+      if (!kycPaid) {
+        localStorage.setItem('sw_open_kyc_payment', 'true');
+        setActiveBottom('setting');
+        setActiveTop('Dashboard');
+      }
+    } catch (error) {
+      console.error('Failed to check KYC status after premium upgrade', error);
+    }
     
     return true;
   };
@@ -344,12 +358,7 @@ const MainInner = () => {
   };
 
   const handleNavigateToPayment = () => {
-    // Navigate to settings tab and open payment sheet
-    setActiveBottom('setting');
-    setActiveTop('Dashboard');
-    // Store a flag to open payment sheet when SettingTab mounts
-    localStorage.setItem('sw_open_payment', 'true');
-    document.querySelector('.screen-body')?.scrollTo({ top: 0, behavior: 'smooth' });
+    setShowPaymentSheet(true);
   };
 
   const handleNavigateToKycPayment = () => {
@@ -419,11 +428,14 @@ const MainInner = () => {
     >
       {/* ── HEADER ── */}
       <div className="app-header">
-        <div className="header-profile">
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <AppLogo size={34} rounded={10} />
+          <div className="header-profile" style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <div className="avatar">{userName.charAt(0).toUpperCase()}</div>
           <div className="header-text">
             <h4>{t('welcome_back')}</h4>
             <span>{userName}</span>
+          </div>
           </div>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -457,6 +469,14 @@ const MainInner = () => {
       <div className="screen-body">
         {renderContent()}
       </div>
+
+      {/* ── PREMIUM PAYMENT SHEET ── */}
+      <PremiumPaymentSheet
+        open={showPaymentSheet}
+        onClose={() => setShowPaymentSheet(false)}
+        onUpgrade={handleUpgrade}
+        proPriceAmount={proPriceAmount}
+      />
 
       {/* ── WITHDRAW SHEET ── */}
       {showWithdraw && (

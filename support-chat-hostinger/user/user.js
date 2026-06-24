@@ -47,7 +47,7 @@
   }
 
   if (!phone || phone.length < 10) {
-    showError('Missing phone number. Open this page from the SkillWork app.');
+    showError('Missing phone number. Open this page from the 24hrwork app.');
     document.getElementById('app').classList.add('hidden');
     return;
   }

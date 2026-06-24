@@ -8,7 +8,6 @@ import Splash from './screens/Splash';
 import Login from './screens/Login';
 import Main from './screens/Main';
 import OnboardingInstructions from './screens/OnboardingInstructions';
-import OnboardingVideo from './screens/OnboardingVideo';
 import OnboardingTelegram from './screens/OnboardingTelegram';
 import Blocked from './screens/Blocked';
 
@@ -38,7 +37,6 @@ function App() {
             <Route path="/login" element={<Login />} />
             <Route path="/blocked" element={<Blocked />} />
             <Route path="/onboarding-1" element={<OnboardingInstructions />} />
-            <Route path="/onboarding-2" element={<OnboardingVideo />} />
             <Route path="/onboarding-3" element={<OnboardingTelegram />} />
             <Route path="/main/*" element={<Main />} />
             <Route path="*" element={<Navigate to="/" />} />

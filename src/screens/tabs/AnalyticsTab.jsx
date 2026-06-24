@@ -1,5 +1,6 @@
 import { useState, useMemo } from 'react';
 import { DEFAULT_PRO_PRICING } from '../../firebase';
+import AppLogo from '../../components/AppLogo';
 
 /* ─── helpers ────────────────────────────────────────────────────────────── */
 const toDate  = str => new Date(str);
@@ -12,11 +13,37 @@ const CAT_COLOR  = {
   Career:'#175CD3', Medical:'#C11574', Design:'#D92D8A',
 };
 
+const CATEGORY_FROM_TYPE = {
+  'PDF Editing': 'Finance',
+  'Resume Filling': 'Career',
+};
+
+function normalizeCompletedTask(raw) {
+  if (!raw || typeof raw !== 'object') return null;
+
+  const name = String(raw.name || raw.taskTitle || raw.type || 'Task');
+  const category = String(raw.category || CATEGORY_FROM_TYPE[raw.type] || 'Basic');
+  const reward = Number(raw.reward) || 0;
+  const date = typeof raw.date === 'string' && raw.date
+    ? raw.date.slice(0, 10)
+    : raw.ts
+      ? fmtDate(new Date(raw.ts))
+      : today;
+  const ts = raw.ts || `${date}T12:00:00.000Z`;
+
+  return { ...raw, name, category, reward, date, ts };
+}
+
 /* ─── useStats: derive everything from localStorage ─────────────────────── */
 function useStats() {
   const all = useMemo(() => {
-    try { return JSON.parse(localStorage.getItem('sw_completed') || '[]'); }
-    catch { return []; }
+    try {
+      const list = JSON.parse(localStorage.getItem('sw_completed') || '[]');
+      if (!Array.isArray(list)) return [];
+      return list.map(normalizeCompletedTask).filter(Boolean);
+    } catch {
+      return [];
+    }
   }, []);
 
   // ── weekly: last 7 days ──
@@ -29,7 +56,7 @@ function useStats() {
         day:   DAYS_SHORT[d.getDay()],
         date:  key,
         tasks: entries.length,
-        earn:  entries.reduce((s, t) => s + t.reward, 0),
+        earn:  entries.reduce((s, t) => s + (Number(t.reward) || 0), 0),
         isToday: key === today,
       };
     });
@@ -43,7 +70,7 @@ function useStats() {
       const earn = all.filter(t => {
         const td = toDate(t.date);
         return td.getFullYear() === year && td.getMonth() === month;
-      }).reduce((s, t) => s + t.reward, 0);
+      }).reduce((s, t) => s + (Number(t.reward) || 0), 0);
       return {
         month: d.toLocaleString('en-IN', { month: 'short' }),
         earn,
@@ -57,7 +84,7 @@ function useStats() {
     all.forEach(t => {
       if (!map[t.category]) map[t.category] = { tasks: 0, earn: 0 };
       map[t.category].tasks += 1;
-      map[t.category].earn  += t.reward;
+      map[t.category].earn  += Number(t.reward) || 0;
     });
     const total = all.length || 1;
     return Object.entries(map)
@@ -85,10 +112,10 @@ function useStats() {
     return count;
   }, [all]);
 
-  const totalEarned = all.reduce((s, t) => s + t.reward, 0);
+  const totalEarned = all.reduce((s, t) => s + (Number(t.reward) || 0), 0);
   const totalTasks  = all.length;
   const todayTasks  = all.filter(t => t.date === today).length;
-  const todayEarn   = all.filter(t => t.date === today).reduce((s, t) => s + t.reward, 0);
+  const todayEarn   = all.filter(t => t.date === today).reduce((s, t) => s + (Number(t.reward) || 0), 0);
   const avgPerTask  = totalTasks ? Math.round(totalEarned / totalTasks) : 0;
   const bestDay     = weekly.reduce((a, b) => b.earn > a.earn ? b : a, { day: '—', earn: 0 });
 
@@ -108,22 +135,24 @@ const EmptyState = () => (
 
 /* ─── Bar Chart ──────────────────────────────────────────────────────────── */
 const BarChart = ({ data, labelKey, valueKey, color, accentIdx = -1 }) => {
-  const max = Math.max(...data.map(d => d[valueKey]), 1);
+  const safeData = Array.isArray(data) ? data : [];
+  const max = Math.max(...safeData.map(d => Number(d[valueKey]) || 0), 1);
   return (
     <div>
       <div style={{ display:'flex', alignItems:'flex-end', gap:6, height:100, marginBottom:6 }}>
-        {data.map((d, i) => {
-          const pct = (d[valueKey] / max) * 100;
+        {safeData.map((d, i) => {
+          const value = Number(d[valueKey]) || 0;
+          const pct = (value / max) * 100;
           const accent = i === accentIdx || d.isToday;
           return (
             <div key={i} style={{ flex:1, display:'flex', flexDirection:'column', alignItems:'center', gap:3, height:'100%', justifyContent:'flex-end' }}>
               <span style={{ fontSize:8, color: accent ? 'var(--green)' : 'var(--text-muted)', fontWeight:700 }}>
-                {d[valueKey] ? (d[valueKey] >= 1000 ? `${(d[valueKey]/1000).toFixed(1)}k` : d[valueKey]) : ''}
+                {value ? (value >= 1000 ? `${(value / 1000).toFixed(1)}k` : value) : ''}
               </span>
               <div style={{
                 width:'100%', borderRadius:'5px 5px 0 0',
                 background: accent ? 'var(--grad-green)' : color,
-                height:`${Math.max(pct, d[valueKey] ? 4 : 0)}%`,
+                height:`${Math.max(pct, value ? 4 : 0)}%`,
                 transition:'height 0.7s cubic-bezier(0.16,1,0.3,1)',
                 boxShadow: accent ? 'var(--green-glow)' : 'none',
               }} />
@@ -132,7 +161,7 @@ const BarChart = ({ data, labelKey, valueKey, color, accentIdx = -1 }) => {
         })}
       </div>
       <div style={{ display:'flex', gap:6 }}>
-        {data.map((d, i) => (
+        {safeData.map((d, i) => (
           <div key={i} style={{ flex:1, textAlign:'center', fontSize:9, color: d.isToday ? 'var(--green)' : 'var(--text-muted)', fontWeight:600 }}>
             {d[labelKey]}
           </div>
@@ -158,7 +187,10 @@ const AnalyticsTab = ({ isPro, proPriceAmount = DEFAULT_PRO_PRICING.amount, tota
         <div style={{ position:'absolute', bottom:-40, left:-20, width:120, height:120, borderRadius:'50%', background:'rgba(67,97,238,0.15)' }} />
 
         <div style={{ position:'relative', zIndex:1 }}>
-          <p style={{ fontSize:11, color:'rgba(255,255,255,0.4)', fontWeight:700, textTransform:'uppercase', letterSpacing:'1px', marginBottom:6 }}>My Analytics</p>
+          <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:10 }}>
+            <AppLogo size={36} rounded={10} />
+            <p style={{ fontSize:11, color:'rgba(255,255,255,0.4)', fontWeight:700, textTransform:'uppercase', letterSpacing:'1px', margin:0 }}>My Analytics</p>
+          </div>
           <h2 style={{ fontSize:22, fontWeight:900, color:'white', fontFamily:'var(--font-display)', marginBottom:4 }}>Your Performance</h2>
           <p style={{ fontSize:13, color:'rgba(255,255,255,0.45)', marginBottom:18 }}>
             {new Date().toLocaleDateString('en-IN',{ weekday:'long', day:'numeric', month:'long' })}
@@ -253,7 +285,7 @@ const AnalyticsTab = ({ isPro, proPriceAmount = DEFAULT_PRO_PRICING.amount, tota
             {categories.length > 0 && (
               <div className="card animate-fade-up" style={{ padding:18, marginBottom:14, animationDelay:'0.28s' }}>
                 <h3 style={{ fontSize:14, fontWeight:700, fontFamily:'var(--font-display)', marginBottom:4 }}>Task Categories</h3>
-                <p style={{ fontSize:11, color:'var(--text-muted)', marginBottom:14 }}>What type of PDF work you've done</p>
+                <p style={{ fontSize:11, color:'var(--text-muted)', marginBottom:14 }}>What type of 24hrwork tasks you've done</p>
 
                 {/* Segmented bar */}
                 <div style={{ display:'flex', borderRadius:100, overflow:'hidden', height:10, marginBottom:14 }}>
@@ -313,9 +345,11 @@ const AnalyticsTab = ({ isPro, proPriceAmount = DEFAULT_PRO_PRICING.amount, tota
                       📄
                     </div>
                     <div>
-                      <div style={{ fontSize:13, fontWeight:600, color:'var(--text-primary)' }}>{t.name.length > 22 ? t.name.slice(0,22)+'…' : t.name}</div>
+                      <div style={{ fontSize:13, fontWeight:600, color:'var(--text-primary)' }}>
+                        {(t.name || 'Task').length > 22 ? `${(t.name || 'Task').slice(0, 22)}…` : (t.name || 'Task')}
+                      </div>
                       <div style={{ fontSize:11, color:'var(--text-muted)', marginTop:1 }}>
-                        {new Date(t.ts).toLocaleDateString('en-IN',{ day:'numeric', month:'short' })} · {t.category}
+                        {new Date(t.ts || t.date || Date.now()).toLocaleDateString('en-IN',{ day:'numeric', month:'short' })} · {t.category || 'Task'}
                       </div>
                     </div>
                   </div>

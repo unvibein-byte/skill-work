@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { DEFAULT_PRO_PRICING, DEFAULT_KYC_REQUIREMENTS } from '../../firebase';
+import AppLogo from '../../components/AppLogo';
 
 const QUICK_AMOUNTS = [100, 200, 500, 1000];
 const MIN_WITHDRAW = 500;
@@ -64,8 +65,7 @@ const WithdrawSheet = ({
       setPhase('premium_modal');
       return;
     }
-    const kycThreshold = Number(kycRequirements?.balanceThreshold ?? DEFAULT_KYC_REQUIREMENTS.balanceThreshold);
-    if (balance >= kycThreshold && !kycFeePaid) {
+    if (!kycFeePaid) {
       setPhase('kyc_modal');
       return;
     }
@@ -139,7 +139,9 @@ const WithdrawSheet = ({
           <h2 style={{ fontSize: 40, marginBottom: 12 }}>🪪</h2>
           <h2 style={{ fontSize: 22, fontWeight: 900, color: '#f59e0b', fontFamily: 'var(--font-display)', marginBottom: 8, position: 'relative', zIndex: 1 }}>KYC required</h2>
           <p style={{ fontSize: 14, fontWeight: 600, color: 'rgba(255,255,255,0.9)', marginBottom: 20, lineHeight: 1.5, position: 'relative', zIndex: 1 }}>
-            Your wallet reached <strong>₹{kycThresholdDisplay.toLocaleString('en-IN')}</strong>. Complete KYC and pay the verification fee of <strong>₹{kycFee.toLocaleString('en-IN')}</strong> to withdraw.
+            {balance >= kycThresholdDisplay
+              ? <>Your wallet reached <strong>₹{kycThresholdDisplay.toLocaleString('en-IN')}</strong>. Complete KYC and pay the verification fee of <strong>₹{kycFee.toLocaleString('en-IN')}</strong> to withdraw.</>
+              : <>As a <strong>Premium</strong> member, complete KYC and pay the verification fee of <strong>₹{kycFee.toLocaleString('en-IN')}</strong> to withdraw.</>}
           </p>
 
           <div style={{ textAlign: 'left', background: 'rgba(255,255,255,0.04)', borderRadius: 16, padding: '16px', border: '1px solid rgba(255,255,255,0.08)', marginBottom: 20, position: 'relative', zIndex: 1 }}>
@@ -198,7 +200,10 @@ const WithdrawSheet = ({
           <div style={{ position: 'absolute', top: -50, right: -50, width: 150, height: 150, borderRadius: '50%', background: 'radial-gradient(circle, rgba(245,158,11,0.2) 0%, transparent 70%)' }}></div>
           <div style={{ position: 'absolute', bottom: -50, left: -50, width: 150, height: 150, borderRadius: '50%', background: 'radial-gradient(circle, rgba(127,86,217,0.3) 0%, transparent 70%)' }}></div>
 
-          <h2 style={{ fontSize: 26, fontWeight: 900, color: '#f59e0b', fontFamily: 'var(--font-display)', marginBottom: 8, position: 'relative', zIndex: 1 }}>SkillWork</h2>
+          <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 12, position: 'relative', zIndex: 1 }}>
+            <AppLogo size={56} rounded={14} />
+          </div>
+          <h2 style={{ fontSize: 26, fontWeight: 900, color: '#f59e0b', fontFamily: 'var(--font-display)', marginBottom: 8, position: 'relative', zIndex: 1 }}>24hrwork</h2>
           <p style={{ fontSize: 14, fontWeight: 700, color: 'white', marginBottom: 20, lineHeight: 1.5, position: 'relative', zIndex: 1, padding: '0 10px' }}>
             पैसे निकालने के लिए नीचे दी गयी जानकारी पूरी पढ़ें !
           </p>

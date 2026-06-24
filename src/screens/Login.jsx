@@ -13,6 +13,7 @@ import {
 import { getPostSplashPath } from '../utils/sessionRoute';
 import { getDeviceId, normalizePhone, isDevicePhoneConflict } from '../utils/deviceId';
 import { setStoredBlockMessage } from '../utils/accountSession';
+import AppLogo from '../components/AppLogo';
 
 const Login = () => {
   const navigate = useNavigate();
@@ -142,8 +143,8 @@ const Login = () => {
           transition={{ duration: 0.5, delay: 0.1 }}
           style={{ position: 'relative', zIndex: 1 }}
         >
-          <div style={{ width: 56, height: 56, background: 'linear-gradient(135deg,#00c37e,#00e896)', borderRadius: 18, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 28, boxShadow: '0 8px 24px rgba(0,195,126,0.4)', marginBottom: 18 }}>
-            💼
+          <div style={{ marginBottom: 18 }}>
+            <AppLogo size={56} rounded={18} withBackground withGlow />
           </div>
           <h1 style={{ fontSize: 26, fontWeight: 900, color: 'white', fontFamily: "'Outfit',sans-serif", letterSpacing: '-0.3px', marginBottom: 8 }}>
             Start Earning Today

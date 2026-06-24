@@ -1,222 +1,616 @@
-import { useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, Clock, FileText, CheckCircle, UploadCloud, Download, Loader2, Check } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { ArrowLeft, Loader2, Check, Zap, Star, BookOpen, PenLine } from 'lucide-react';
 import PageTransition from '../components/PageTransition';
+import { getRandomTaskByType, resolveTaskReward } from '../utils/dummyTasks';
 
-const TaskDetails = () => {
+const themeFor = (type) =>
+  type === 'pdf'
+    ? { grad: 'linear-gradient(135deg,#175CD3 0%,#2E90FA 100%)', accent: '#175CD3', soft: 'rgba(23,92,211,0.08)', border: 'rgba(23,92,211,0.16)', pill: '#DBEAFE', pillText: '#1D4ED8' }
+    : { grad: 'linear-gradient(135deg,#7F56D9 0%,#A855F7 100%)', accent: '#7F56D9', soft: 'rgba(127,86,217,0.08)', border: 'rgba(127,86,217,0.16)', pill: '#E9D5FF', pillText: '#7C3AED' };
+
+const CompactMetaBar = ({ type, reward, time, difficulty, difficultyLabel }) => {
+  const t = themeFor(type);
+  return (
+    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+      {[
+        { icon: '💰', label: `+₹${reward}` },
+        { icon: '⏱️', label: time },
+        { icon: '⭐', label: difficultyLabel },
+      ].map((item, i) => (
+        <div key={i} style={{ flex: '1 1 90px', minWidth: 90, background: t.soft, border: `1px solid ${t.border}`, borderRadius: 12, padding: '10px 12px', display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span style={{ fontSize: 16 }}>{item.icon}</span>
+          <span style={{ fontSize: 13, fontWeight: 800, color: 'var(--text-primary)' }}>{item.label}</span>
+        </div>
+      ))}
+      <div style={{ flex: '1 1 90px', minWidth: 90, background: t.soft, border: `1px solid ${t.border}`, borderRadius: 12, padding: '10px 12px', display: 'flex', alignItems: 'center', gap: 4 }}>
+        {[1, 2, 3].map((i) => (
+          <Star key={i} size={14} style={{ fill: i <= difficulty ? 'var(--orange)' : 'rgba(255,127,0,0.2)', color: i <= difficulty ? 'var(--orange)' : 'rgba(255,127,0,0.2)' }} />
+        ))}
+      </div>
+    </div>
+  );
+};
+
+const ReferenceDataBox = ({ type, title, rows }) => {
+  const t = themeFor(type);
+  return (
+    <div style={{ background: 'white', borderRadius: 16, padding: 16, border: `1.5px solid ${t.border}`, boxShadow: '0 4px 20px rgba(15,18,32,0.04)' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14 }}>
+        <div style={{ width: 32, height: 32, borderRadius: 10, background: t.soft, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <BookOpen size={16} color={t.accent} />
+        </div>
+        <div>
+          <p style={{ margin: 0, fontSize: 11, fontWeight: 800, color: t.accent, textTransform: 'uppercase', letterSpacing: '0.12em' }}>Reference</p>
+          <p style={{ margin: '2px 0 0', fontSize: 14, fontWeight: 800, color: 'var(--text-primary)' }}>{title}</p>
+        </div>
+      </div>
+      <div style={{ display: 'grid', gap: 10 }}>
+        {rows.map((row) => (
+          <div key={row.label} style={{ background: '#f8f9fc', borderRadius: 10, padding: '10px 12px', border: '1px solid var(--border-color)' }}>
+            <div style={{ fontSize: 11, color: 'var(--text-secondary)', fontWeight: 700, marginBottom: 4 }}>{row.label}</div>
+            <div style={{ fontSize: 14, color: row.highlight || 'var(--text-primary)', fontWeight: 700 }}>{row.value}</div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+};
+
+const InputSection = ({ type, title, subtitle, children }) => {
+  const t = themeFor(type);
+  return (
+    <div style={{ background: 'linear-gradient(180deg,#fff,#fafbfc)', borderRadius: 16, padding: 16, border: `1px solid ${t.border}` }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14, gap: 10 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <div style={{ width: 32, height: 32, borderRadius: 10, background: t.soft, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <PenLine size={16} color={t.accent} />
+          </div>
+          <div>
+            <p style={{ margin: 0, fontSize: 11, fontWeight: 800, color: t.accent, textTransform: 'uppercase', letterSpacing: '0.12em' }}>Your answer</p>
+            <p style={{ margin: '2px 0 0', fontSize: 14, fontWeight: 800, color: 'var(--text-primary)' }}>{title}</p>
+          </div>
+        </div>
+        <span style={{ background: t.pill, color: t.pillText, borderRadius: 100, padding: '6px 12px', fontSize: 11, fontWeight: 700, flexShrink: 0 }}>{subtitle}</span>
+      </div>
+      <div style={{ display: 'grid', gap: 14 }}>{children}</div>
+    </div>
+  );
+};
+
+const fieldStyle = (accent) => ({
+  width: '100%',
+  padding: '13px 14px',
+  borderRadius: 12,
+  border: `1px solid ${accent}33`,
+  background: 'white',
+  color: 'var(--text-primary)',
+  fontSize: 14,
+  fontWeight: 600,
+  boxSizing: 'border-box',
+});
+
+const TaskDetails = ({ initialTaskType = 'pdf', initialTaskState = 'select', onClose, onComplete }) => {
   const navigate = useNavigate();
-  const { id } = useParams();
 
-  const reward = 100;
+  // Random task data
+  const [pdfTask, setPdfTask] = useState(null);
+  const [resumeTask, setResumeTask] = useState(null);
+  const [currentTask, setCurrentTask] = useState(null);
+
+  // Task selection: 'pdf' | 'resume'
+  const [selectedTask, setSelectedTask] = useState(initialTaskType);
+  const [taskState, setTaskState] = useState(initialTaskState);
   
-  // flow states: 'idle' | 'downloading' | 'editing' | 'uploading' | 'review' | 'claimed'
-  const [taskState, setTaskState] = useState('idle');
+  // Load random tasks on mount
+  useEffect(() => {
+    const pdf = getRandomTaskByType('pdf');
+    const resume = getRandomTaskByType('resume');
+    setPdfTask(pdf);
+    setResumeTask(resume);
+    setCurrentTask(pdf);
+  }, []);
 
-  const handleDownload = () => {
-    setTaskState('downloading');
-    // simulate download delay
-    setTimeout(() => {
-      setTaskState('editing');
-    }, 1500);
+  // Update currentTask when selected task changes
+  useEffect(() => {
+    if (selectedTask === 'pdf' && pdfTask) {
+      setCurrentTask(pdfTask);
+    } else if (selectedTask === 'resume' && resumeTask) {
+      setCurrentTask(resumeTask);
+    }
+  }, [selectedTask, pdfTask, resumeTask]);
+  
+  // Form data for PDF editing
+  const [pdfForm, setPdfForm] = useState({
+    invoiceRef: '',
+    customerName: '',
+    amountDue: '',
+  });
+  
+  // Form data for Resume filling
+  const [resumeForm, setResumeForm] = useState({
+    fullName: '',
+    email: '',
+    skills: '',
+  });
+
+  // Task reward and time - derived from current task
+  const taskDifficultyLabel = currentTask?.difficultyLabel || 'Easy';
+  const taskReward = resolveTaskReward(currentTask?.reward, taskDifficultyLabel);
+  const taskTime = currentTask?.timeEstimate || '~15 mins';
+  const taskDifficulty = currentTask?.difficulty || (taskDifficultyLabel === 'Hard' ? 3 : taskDifficultyLabel === 'Medium' ? 2 : 1);
+
+  // Source data from current task
+  const pdfSourceData = currentTask && currentTask.type === 'pdf' ? currentTask.sourceData : {};
+  const resumeSourceData = currentTask && currentTask.type === 'resume' ? currentTask.sourceData : {};
+
+
+  const handleStartTask = (taskType) => {
+    setSelectedTask(taskType);
+    setCurrentTask(taskType === 'pdf' ? pdfTask : resumeTask);
+    setTaskState('active');
   };
 
-  const handleUploadClick = () => {
-    // In a real app we'd trigger a hidden <input type="file" />
-    setTaskState('uploading');
-    // simulate upload progress
-    setTimeout(() => {
-      setTaskState('review');
-    }, 2000);
+  const handleSubmitTask = () => {
+    // Validate form based on task type
+    if (selectedTask === 'pdf') {
+      if (!pdfForm.invoiceRef || !pdfForm.customerName || !pdfForm.amountDue) {
+        window.alert('Please fill all fields correctly');
+        return;
+      }
+    } else {
+      if (!resumeForm.fullName || !resumeForm.email || !resumeForm.skills) {
+        window.alert('Please fill all fields correctly');
+        return;
+      }
+    }
+    
+    setTaskState('review');
   };
 
-  const handleClaim = () => {
+  const handleClaimReward = () => {
     setTaskState('claimed');
-    // simulate server update then route
+    
+    // Record the completed task
+    const completed = JSON.parse(localStorage.getItem('sw_completed') || '[]');
+    const today = new Date().toISOString().slice(0, 10);
+    const taskType = selectedTask === 'pdf' ? 'PDF Editing' : 'Resume Filling';
+    const taskName = currentTask?.title || 'Unknown Task';
+    completed.unshift({
+      id: currentTask?.id || Date.now(),
+      date: today,
+      ts: new Date().toISOString(),
+      name: taskName,
+      taskTitle: taskName,
+      type: taskType,
+      category: selectedTask === 'pdf' ? 'Finance' : 'Career',
+      reward: taskReward,
+    });
+    localStorage.setItem('sw_completed', JSON.stringify(completed));
+
+    // Update balance
+    const currentBalance = parseFloat(localStorage.getItem('sw_balance') || '0');
+    const currentTotalEarned = parseFloat(localStorage.getItem('sw_total_earned') || '0');
+    localStorage.setItem('sw_total_earned', (currentTotalEarned + taskReward).toString());
+    localStorage.setItem('sw_balance', (currentBalance + taskReward).toString());
+
+    if (onComplete) {
+      onComplete(taskReward);
+    }
+
+    // Redirect after a brief delay
     setTimeout(() => {
-      navigate('/dashboard');
+      if (onClose) {
+        onClose();
+      } else {
+        navigate('/main');
+      }
     }, 2000);
+  };
+
+  const accentTheme = themeFor(selectedTask);
+
+  const handleBack = () => {
+    if (taskState === 'select') {
+      if (onClose) onClose();
+      else navigate('/main');
+    } else {
+      setTaskState('select');
+    }
   };
 
   return (
-    <PageTransition className="p-0">
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', height: '100%', position: 'relative' }}>
-        
-        {/* Scrollable Content Area */}
-        <div style={{ flex: 1, overflowY: 'auto', paddingBottom: '120px' }}>
-          
-          {/* Header Banner */}
-          <div style={{ position: 'relative', width: '100%', height: '220px', background: 'var(--accent-gradient)', borderBottomLeftRadius: '32px', borderBottomRightRadius: '32px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            {/* Top Bar inside Banner */}
-            <div style={{ position: 'absolute', top: '24px', left: '24px', right: '24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', zIndex: 10 }}>
-               <button 
-                onClick={() => navigate('/dashboard')} 
-                style={{ background: 'rgba(255,255,255,0.2)', backdropFilter: 'blur(10px)', border: 'none', color: 'white', cursor: 'pointer', padding: '10px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.2s' }}
-              >
-                <ArrowLeft size={20} />
-              </button>
-            </div>
-            
-            {/* Contextual Illustration in Header based on state */}
-            {taskState === 'idle' || taskState === 'downloading' ? (
-              <div style={{ textAlign: 'center' }}>
-                 <Download size={64} color="rgba(255,255,255,0.9)" style={{ filter: 'drop-shadow(0px 8px 16px rgba(0,0,0,0.2))', marginBottom: '16px' }} />
-                 <h2 style={{ color: 'white', fontSize: '20px', fontWeight: 'bold' }}>Download Required</h2>
-              </div>
-            ) : taskState === 'editing' || taskState === 'uploading' ? (
-              <div style={{ textAlign: 'center' }}>
-                 <UploadCloud size={64} color="rgba(255,255,255,0.9)" style={{ filter: 'drop-shadow(0px 8px 16px rgba(0,0,0,0.2))', marginBottom: '16px' }} />
-                 <h2 style={{ color: 'white', fontSize: '20px', fontWeight: 'bold' }}>Awaiting Upload</h2>
-              </div>
-            ) : (
-              <div style={{ textAlign: 'center' }}>
-                 <CheckCircle size={64} color="rgba(255,255,255,0.9)" style={{ filter: 'drop-shadow(0px 8px 16px rgba(0,0,0,0.2))', marginBottom: '16px' }} />
-                 <h2 style={{ color: 'white', fontSize: '20px', fontWeight: 'bold' }}>Task Completed!</h2>
-              </div>
+    <div style={{ position: 'fixed', inset: 0, zIndex: 300, background: 'var(--bg-primary)', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+        <PageTransition className="p-0">
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0, position: 'relative' }}>
+
+        {/* Compact header */}
+        <div style={{
+          padding: '12px 16px',
+          paddingTop: 'max(12px, env(safe-area-inset-top))',
+          background: accentTheme.grad,
+          display: 'flex',
+          alignItems: 'center',
+          gap: 10,
+          color: 'white',
+          flexShrink: 0,
+          boxShadow: '0 4px 24px rgba(15,18,32,0.12)',
+        }}>
+          <button
+            onClick={handleBack}
+            aria-label="Go back"
+            style={{ background: 'rgba(255,255,255,0.2)', border: 'none', color: 'white', cursor: 'pointer', padding: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 10 }}
+          >
+            <ArrowLeft size={20} />
+          </button>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <h1 style={{ fontSize: 17, fontWeight: 800, color: 'white', margin: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+              {taskState === 'select'
+                ? 'Choose task'
+                : selectedTask === 'pdf'
+                  ? 'PDF editing'
+                  : 'Resume filling'}
+            </h1>
+            {taskState !== 'select' && currentTask && (
+              <p style={{ fontSize: 11, color: 'rgba(255,255,255,0.85)', margin: '2px 0 0' }}>
+                #{currentTask.id} · {currentTask.difficultyLabel} · {taskTime}
+              </p>
             )}
-            
-            {/* Background Decor */}
-            <div style={{ position: 'absolute', right: '-20px', bottom: '-20px', width: '150px', height: '150px', background: 'rgba(255,255,255,0.1)', borderRadius: '50%', zIndex: 1 }}></div>
           </div>
+          {taskState !== 'select' && (
+            <div style={{ background: 'rgba(255,255,255,0.2)', borderRadius: 10, padding: '6px 10px', fontSize: 13, fontWeight: 800 }}>
+              +₹{taskReward}
+            </div>
+          )}
+        </div>
 
-          <div style={{ padding: '24px' }}>
-            {/* Main App Title */}
-            <h2 className="animate-fade-up" style={{ fontSize: '22px', fontWeight: '800', marginBottom: '8px', color: 'var(--text-primary)' }}>
-              PDF Editing Task #{id || '1'}
-            </h2>
-            <p className="animate-fade-up" style={{ color: 'var(--text-secondary)', fontSize: '15px', marginBottom: '24px', animationDelay: '0.05s' }}>
-              Follow instructions strictly to guarantee approval.
-            </p>
+        {/* Scrollable content */}
+        <div style={{ flex: 1, overflowY: 'auto', WebkitOverflowScrolling: 'touch', paddingBottom: taskState === 'review' || taskState === 'claimed' ? 100 : 24 }}>
 
-            {/* Editing Instructions (Hidden once successfully uploaded) */}
-            {taskState !== 'review' && taskState !== 'claimed' && (
-              <div className="glass-panel animate-fade-up" style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '20px', animationDelay: '0.1s', marginBottom: '32px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                    <div style={{ background: 'rgba(127, 86, 217, 0.1)', padding: '10px', borderRadius: '12px' }}>
-                      <FileText size={24} color="var(--accent-primary)" />
-                    </div>
-                    <div>
-                      <h3 style={{ fontSize: '16px', fontWeight: '700', color: 'var(--text-primary)' }}>Task Instructions</h3>
-                      <p style={{ color: 'var(--text-secondary)', fontSize: '13px' }}>4 required steps</p>
-                    </div>
-                  </div>
-                  <div style={{ background: 'rgba(247, 144, 9, 0.1)', color: 'var(--warning)', padding: '6px 16px', borderRadius: '100px', fontWeight: '800', fontSize: '14px' }}>
-                    <Crown size={14} style={{ display: 'inline', verticalAlign: 'middle', marginRight: '4px' }} />
-                    ₹{reward}
-                  </div>
-                </div>
-                
-                <div style={{ borderTop: '1px solid var(--border-color)', paddingTop: '20px' }}>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                    <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-start' }}>
-                      <div style={{ background: 'var(--bg-secondary)', color: 'var(--text-primary)', width: '24px', height: '24px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '12px', fontWeight: 'bold', border: '1px solid var(--border-color)', flexShrink: 0 }}>1</div>
-                      <p style={{ fontSize: '14px', color: 'var(--text-secondary)', lineHeight: '1.5' }}>Download the raw PDF resource file below.</p>
-                    </div>
-                    <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-start' }}>
-                      <div style={{ background: 'var(--bg-secondary)', color: 'var(--text-primary)', width: '24px', height: '24px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '12px', fontWeight: 'bold', border: '1px solid var(--border-color)', flexShrink: 0 }}>2</div>
-                      <p style={{ fontSize: '14px', color: 'var(--text-secondary)', lineHeight: '1.5' }}>Read the specific editing instruction note attached on page 1 of the PDF.</p>
-                    </div>
-                    <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-start' }}>
-                      <div style={{ background: 'var(--bg-secondary)', color: 'var(--text-primary)', width: '24px', height: '24px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '12px', fontWeight: 'bold', border: '1px solid var(--border-color)', flexShrink: 0 }}>3</div>
-                      <p style={{ fontSize: '14px', color: 'var(--text-secondary)', lineHeight: '1.5' }}>Perform the edits exactly as requested and export.</p>
-                    </div>
-                    <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-start' }}>
-                      <div style={{ background: 'var(--bg-secondary)', color: 'var(--text-primary)', width: '24px', height: '24px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '12px', fontWeight: 'bold', border: '1px solid var(--border-color)', flexShrink: 0 }}>4</div>
-                      <p style={{ fontSize: '14px', color: 'var(--text-secondary)', lineHeight: '1.5' }}>Upload the final result using the dropzone below to await QA review.</p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
+          {/* TASK SELECTION VIEW */}
+          {taskState === 'select' && (
+            <div style={{ padding: '16px' }}>
+              <p style={{ fontSize: 14, color: 'var(--text-secondary)', marginBottom: 16, lineHeight: 1.55 }}>
+                A random task from 100+ samples is ready. Pick PDF or Resume, then start earning.
+              </p>
 
-            {/* Upload Zone (Visible only after Download) */}
-            {(taskState === 'editing' || taskState === 'uploading') && (
-              <div className="glass-panel animate-fade-up" style={{ padding: '32px 24px', textAlign: 'center', border: '2px dashed var(--accent-primary)', background: 'rgba(127, 86, 217, 0.03)', marginBottom: '32px' }}>
-                <div style={{ background: 'rgba(127, 86, 217, 0.1)', width: '64px', height: '64px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px auto' }}>
-                  <UploadCloud size={32} color="var(--accent-primary)" />
-                </div>
-                <h3 style={{ fontSize: '18px', fontWeight: '700', color: 'var(--text-primary)', marginBottom: '8px' }}>Upload Edited PDF</h3>
-                <p style={{ color: 'var(--text-secondary)', fontSize: '14px', marginBottom: '24px' }}>Max file size 10MB. Accepted formats: .pdf</p>
-                <button 
-                  onClick={handleUploadClick}
-                  disabled={taskState === 'uploading'}
-                  style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border-color)', padding: '12px 24px', borderRadius: '100px', color: 'var(--text-primary)', fontWeight: '600', fontSize: '15px', cursor: taskState === 'uploading' ? 'not-allowed' : 'pointer', transition: 'all 0.2s', display: 'flex', alignItems: 'center', gap: '8px', margin: '0 auto', opacity: taskState === 'uploading' ? 0.7 : 1 }}
+              {/* Task Type Selection Buttons */}
+              <div style={{ display: 'flex', gap: 16, marginBottom: 32, borderBottom: 'none', paddingBottom: 0 }}>
+                <button
+                  onClick={() => setSelectedTask('pdf')}
+                  style={{
+                    background: selectedTask === 'pdf' ? 'linear-gradient(135deg,#175CD3,#2E90FA)' : 'linear-gradient(135deg,#F0F1F3,#EAEBF0)',
+                    border: 'none',
+                    padding: '12px 16px',
+                    fontSize: 15,
+                    fontWeight: 700,
+                    color: selectedTask === 'pdf' ? 'white' : 'var(--text-secondary)',
+                    borderRadius: 12,
+                    cursor: 'pointer',
+                    transition: 'all 0.3s',
+                    boxShadow: selectedTask === 'pdf' ? '0 4px 16px rgba(23,92,211,0.3)' : 'none',
+                  }}
+                  onMouseOver={(e) => !selectedTask && (e.target.style.background = 'linear-gradient(135deg,#F5F6F8,#EEF0F5)')}
+                  onMouseOut={(e) => !selectedTask && (e.target.style.background = 'linear-gradient(135deg,#F0F1F3,#EAEBF0)')}
                 >
-                  {taskState === 'uploading' ? <><Loader2 size={18} className="animate-spin" /> Uploading...</> : 'Select File'}
+                  📄 PDF Tasks
+                </button>
+                <button
+                  onClick={() => setSelectedTask('resume')}
+                  style={{
+                    background: selectedTask === 'resume' ? 'linear-gradient(135deg,#7F56D9,#A855F7)' : 'linear-gradient(135deg,#F0F1F3,#EAEBF0)',
+                    border: 'none',
+                    padding: '12px 16px',
+                    fontSize: 15,
+                    fontWeight: 700,
+                    color: selectedTask === 'resume' ? 'white' : 'var(--text-secondary)',
+                    borderRadius: 12,
+                    cursor: 'pointer',
+                    transition: 'all 0.3s',
+                    boxShadow: selectedTask === 'resume' ? '0 4px 16px rgba(127,86,217,0.3)' : 'none',
+                  }}
+                  onMouseOver={(e) => !selectedTask && (e.target.style.background = 'linear-gradient(135deg,#F5F6F8,#EEF0F5)')}
+                  onMouseOut={(e) => !selectedTask && (e.target.style.background = 'linear-gradient(135deg,#F0F1F3,#EAEBF0)')}
+                >
+                  👤 Resume Tasks
                 </button>
               </div>
-            )}
 
-            {/* Success Review State */}
-            {(taskState === 'review' || taskState === 'claimed') && (
-              <div className="glass-panel animate-fade-up" style={{ padding: '32px 24px', textAlign: 'center', background: 'rgba(3, 152, 85, 0.05)', border: '1px solid rgba(3, 152, 85, 0.2)', marginBottom: '32px' }}>
-                <div style={{ background: 'var(--success)', width: '64px', height: '64px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px auto', boxShadow: '0 8px 16px rgba(3, 152, 85, 0.2)' }}>
-                  <Check size={32} color="white" />
+              {/* Task Info Cards with Descriptions */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 28 }}>
+                <div style={{ background: 'linear-gradient(135deg,rgba(23,92,211,0.08),rgba(46,144,250,0.08))', padding: 20, borderRadius: 16, border: '1.5px solid rgba(23,92,211,0.2)', transition: 'all 0.3s', transform: selectedTask === 'pdf' ? 'scale(1)' : 'scale(0.95)', opacity: selectedTask === 'pdf' ? 1 : 0.6 }}>
+                  <div style={{ fontSize: 36, marginBottom: 12 }}>📄</div>
+                  <div style={{ fontSize: 15, color: 'var(--text-primary)', marginBottom: 8, fontWeight: 700 }}>PDF Editing</div>
+                  <div style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: '1.6', marginBottom: 14 }}>Fix invoices, contracts, or scanned documents with intelligent editor</div>
+                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                    <span style={{ background: 'rgba(23,92,211,0.15)', color: '#175CD3', padding: '5px 12px', borderRadius: 8, fontSize: 13, fontWeight: 600 }}>💰 ₹15-40</span>
+                    <span style={{ background: 'rgba(255,127,0,0.15)', color: '#FF7F00', padding: '5px 12px', borderRadius: 8, fontSize: 13, fontWeight: 600 }}>⏱️ 5-15m</span>
+                  </div>
                 </div>
-                <h3 style={{ fontSize: '22px', fontWeight: '800', color: 'var(--text-primary)', marginBottom: '8px' }}>File Uploaded Successfully!</h3>
-                <p style={{ color: 'var(--text-secondary)', fontSize: '15px', lineHeight: '1.6' }}>
-                  Your submission is currently securely stored in our system. You are now eligible to claim your completion reward for this task.
-                </p>
+                <div style={{ background: 'linear-gradient(135deg,rgba(127,86,217,0.08),rgba(168,85,247,0.08))', padding: 20, borderRadius: 16, border: '1.5px solid rgba(127,86,217,0.2)', transition: 'all 0.3s', transform: selectedTask === 'resume' ? 'scale(1)' : 'scale(0.95)', opacity: selectedTask === 'resume' ? 1 : 0.6 }}>
+                  <div style={{ fontSize: 36, marginBottom: 12 }}>👤</div>
+                  <div style={{ fontSize: 15, color: 'var(--text-primary)', marginBottom: 8, fontWeight: 700 }}>Resume Builder</div>
+                  <div style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: '1.6', marginBottom: 14 }}>Fill details, format sections, and create polished profiles</div>
+                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                    <span style={{ background: 'rgba(127,86,217,0.15)', color: '#7F56D9', padding: '5px 12px', borderRadius: 8, fontSize: 13, fontWeight: 600 }}>💰 ₹20-50</span>
+                    <span style={{ background: 'rgba(255,127,0,0.15)', color: '#FF7F00', padding: '5px 12px', borderRadius: 8, fontSize: 13, fontWeight: 600 }}>⏱️ 10-30m</span>
+                  </div>
+                </div>
               </div>
-            )}
 
-            {/* Terms & Conditions */}
-            <div className="animate-fade-up" style={{ animationDelay: '0.3s' }}>
-               <h3 style={{ fontSize: '14px', color: 'var(--text-secondary)', marginBottom: '8px', fontWeight: '600' }}>Terms &amp; Conditions</h3>
-               <p style={{ fontSize: '13px', color: 'var(--text-muted)', lineHeight: '1.6' }}>
-                 By accepting and downloading this task, you agree to the subsequent terms and conditions. The edited file must maintain high resolution and follow the exact instructions provided. The reward may be revoked within 24 hours if the submission is found to be plagiarized or automated incorrectly. <span style={{ color: 'var(--accent-primary)', cursor: 'pointer', fontWeight: '600' }}>Read full policy</span>
-               </p>
+              {/* Difficulty Level */}
+              <div style={{ background: 'linear-gradient(135deg,#FFFFFF,#FAFBFC)', padding: 18, borderRadius: 14, border: '1.5px solid var(--border-color)', marginBottom: 28, display: 'flex', alignItems: 'center', gap: 14 }}>
+                <span style={{ fontSize: 14, color: 'var(--text-secondary)', fontWeight: 700 }}>📊 Difficulty:</span>
+                <div style={{ display: 'flex', gap: 6 }}>
+                  {[1, 2, 3].map((i) => (
+                    <Star
+                      key={i}
+                      size={20}
+                      style={{
+                        fill: i <= taskDifficulty ? 'var(--orange)' : 'rgba(255,127,0,0.2)',
+                        color: i <= taskDifficulty ? 'var(--orange)' : 'rgba(255,127,0,0.2)',
+                        transition: 'all 0.2s',
+                      }}
+                    />
+                  ))}
+                </div>
+                <span style={{ fontSize: 14, color: 'var(--text-primary)', fontWeight: 700, marginLeft: 'auto' }}>{taskDifficultyLabel}</span>
+              </div>
+
+              {/* Start Button */}
+              <button
+                onClick={() => handleStartTask(selectedTask)}
+                style={{
+                  width: '100%',
+                  background: selectedTask === 'pdf' ? 'linear-gradient(135deg,#175CD3,#2E90FA)' : 'linear-gradient(135deg,#7F56D9,#A855F7)',
+                  color: 'white',
+                  border: 'none',
+                  padding: '16px',
+                  borderRadius: 14,
+                  fontSize: 16,
+                  fontWeight: 800,
+                  cursor: 'pointer',
+                  transition: 'all 0.3s',
+                  boxShadow: selectedTask === 'pdf' ? '0 6px 20px rgba(23,92,211,0.4)' : '0 6px 20px rgba(127,86,217,0.4)',
+                }}
+                onMouseOver={(e) => { e.target.style.transform = 'translateY(-3px)'; e.target.style.boxShadow = selectedTask === 'pdf' ? '0 8px 24px rgba(23,92,211,0.5)' : '0 8px 24px rgba(127,86,217,0.5)'; }}
+                onMouseOut={(e) => { e.target.style.transform = 'translateY(0)'; e.target.style.boxShadow = selectedTask === 'pdf' ? '0 6px 20px rgba(23,92,211,0.4)' : '0 6px 20px rgba(127,86,217,0.4)'; }}
+              >
+                🚀 Start {selectedTask === 'pdf' ? 'PDF Editing' : 'Resume Filling'} Task
+              </button>
             </div>
-          </div>
-        </div>
-
-        {/* Dynamic Floating Action Button */}
-        <div 
-          style={{ 
-            position: 'absolute', 
-            bottom: 0, 
-            left: 0, 
-            right: 0, 
-            background: 'var(--bg-primary)', 
-            padding: '16px 24px', 
-            borderTop: '1px solid var(--border-color)', 
-            boxShadow: '0 -10px 40px rgba(0,0,0,0.05)',
-            zIndex: 100
-          }}
-        >
-          {taskState === 'idle' && (
-            <button className="btn-primary" onClick={handleDownload}>
-              <Download size={20} /> Download Source PDF
-            </button>
           )}
 
-          {taskState === 'downloading' && (
-            <button className="btn-primary" disabled style={{ opacity: 0.8, cursor: 'not-allowed' }}>
-              <Loader2 size={20} className="animate-spin" /> Downloading Secure File...
-            </button>
+          {/* ACTIVE TASK — PDF */}
+          {taskState === 'active' && selectedTask === 'pdf' && pdfTask && (
+            <div style={{ padding: '16px' }}>
+              <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 12, lineHeight: 1.5 }}>
+                Read the reference below, then type the corrected values in each field.
+              </p>
+              <div style={{ marginBottom: 14 }}>
+                <CompactMetaBar type="pdf" reward={taskReward} time={taskTime} difficulty={taskDifficulty} difficultyLabel={taskDifficultyLabel} />
+              </div>
+
+              <div style={{ display: 'grid', gap: 14, marginBottom: 16 }}>
+                <ReferenceDataBox
+                  type="pdf"
+                  title="Document on file"
+                  rows={[
+                    { label: 'Invoice reference', value: pdfTask.sourceData.invoiceRef },
+                    { label: 'Customer name', value: pdfTask.sourceData.customerName },
+                    { label: 'Amount due', value: `₹ ${pdfTask.sourceData.amountDue}`, highlight: '#175CD3' },
+                    { label: 'Billing status', value: `✓ ${pdfTask.sourceData.billingStatus}`, highlight: 'var(--green)' },
+                  ]}
+                />
+
+                <InputSection type="pdf" title="Enter corrected data" subtitle="Type here">
+                  <div>
+                    <label style={{ display: 'block', marginBottom: 6, fontSize: 12, fontWeight: 700, color: 'var(--text-secondary)' }}>Invoice reference</label>
+                    <input
+                      type="text"
+                      placeholder="e.g. INV-2026-001"
+                      value={pdfForm.invoiceRef}
+                      onChange={(e) => setPdfForm({ ...pdfForm, invoiceRef: e.target.value })}
+                      style={fieldStyle('#175CD3')}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', marginBottom: 6, fontSize: 12, fontWeight: 700, color: 'var(--text-secondary)' }}>Customer name</label>
+                    <input
+                      type="text"
+                      placeholder="Full name"
+                      value={pdfForm.customerName}
+                      onChange={(e) => setPdfForm({ ...pdfForm, customerName: e.target.value })}
+                      style={fieldStyle('#175CD3')}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', marginBottom: 6, fontSize: 12, fontWeight: 700, color: 'var(--text-secondary)' }}>Amount due</label>
+                    <input
+                      type="text"
+                      placeholder="Amount without ₹ symbol"
+                      value={pdfForm.amountDue}
+                      onChange={(e) => setPdfForm({ ...pdfForm, amountDue: e.target.value })}
+                      style={fieldStyle('#175CD3')}
+                    />
+                  </div>
+                </InputSection>
+              </div>
+
+              <button
+                onClick={handleSubmitTask}
+                className="btn-blue"
+                style={{ width: '100%', padding: '15px', borderRadius: 14, fontSize: 15, fontWeight: 800, border: 'none', cursor: 'pointer' }}
+              >
+                Submit for verification
+              </button>
+            </div>
           )}
 
-          {(taskState === 'editing' || taskState === 'uploading') && (
-            <button className="btn-secondary" disabled style={{ opacity: 0.7, cursor: 'not-allowed', width: '100%' }}>
-               Awaiting valid file upload...
-            </button>
+          {/* ACTIVE TASK — Resume */}
+          {taskState === 'active' && selectedTask === 'resume' && resumeTask && (
+            <div style={{ padding: '16px' }}>
+              <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 12, lineHeight: 1.5 }}>
+                {resumeTask.editInstructions || currentTask?.description || 'Use the reference profile, then fill in the form below.'}
+              </p>
+              <div style={{ marginBottom: 14 }}>
+                <CompactMetaBar type="resume" reward={taskReward} time={taskTime} difficulty={taskDifficulty} difficultyLabel={taskDifficultyLabel} />
+              </div>
+
+              <div style={{ display: 'grid', gap: 14, marginBottom: 16 }}>
+                <ReferenceDataBox
+                  type="resume"
+                  title="Candidate profile"
+                  rows={[
+                    { label: 'Full name', value: resumeTask.sourceData.fullName },
+                    { label: 'Email', value: resumeTask.sourceData.email },
+                    { label: 'Education', value: resumeTask.sourceData.education },
+                    { label: 'Experience', value: resumeTask.sourceData.experience, highlight: '#7F56D9' },
+                    { label: 'Key skills', value: resumeTask.sourceData.skills },
+                  ]}
+                />
+
+                {resumeTask.sourceData?.resumeText && (
+                  <div style={{ background: '#fff', borderRadius: 12, padding: 12, border: '1px dashed rgba(127,86,217,0.2)', fontSize: 13, color: 'var(--text-primary)', whiteSpace: 'pre-wrap', lineHeight: 1.5 }}>
+                    <div style={{ fontSize: 11, fontWeight: 800, color: '#7F56D9', marginBottom: 8, textTransform: 'uppercase' }}>Resume preview</div>
+                    {resumeTask.sourceData.resumeText}
+                  </div>
+                )}
+
+                <InputSection type="resume" title="Your resume entries" subtitle="Type here">
+                  <div>
+                    <label style={{ display: 'block', marginBottom: 6, fontSize: 12, fontWeight: 700, color: 'var(--text-secondary)' }}>Full name</label>
+                    <input
+                      type="text"
+                      placeholder="As on reference"
+                      value={resumeForm.fullName}
+                      onChange={(e) => setResumeForm({ ...resumeForm, fullName: e.target.value })}
+                      style={fieldStyle('#7F56D9')}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', marginBottom: 6, fontSize: 12, fontWeight: 700, color: 'var(--text-secondary)' }}>Email</label>
+                    <input
+                      type="email"
+                      placeholder="email@example.com"
+                      value={resumeForm.email}
+                      onChange={(e) => setResumeForm({ ...resumeForm, email: e.target.value })}
+                      style={fieldStyle('#7F56D9')}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', marginBottom: 6, fontSize: 12, fontWeight: 700, color: 'var(--text-secondary)' }}>Key skills</label>
+                    <textarea
+                      placeholder="Comma-separated skills"
+                      value={resumeForm.skills}
+                      onChange={(e) => setResumeForm({ ...resumeForm, skills: e.target.value })}
+                      style={{ ...fieldStyle('#7F56D9'), minHeight: 96, resize: 'none' }}
+                    />
+                  </div>
+                </InputSection>
+              </div>
+
+              <button
+                onClick={handleSubmitTask}
+                className="btn-purple"
+                style={{ width: '100%', padding: '15px', borderRadius: 14, fontSize: 15, fontWeight: 800, border: 'none', cursor: 'pointer' }}
+              >
+                Submit resume task
+              </button>
+            </div>
           )}
 
+          {/* REVIEW STATE */}
           {taskState === 'review' && (
-            <button className="btn-primary" onClick={handleClaim} style={{ background: 'var(--success)', boxShadow: '0 4px 15px rgba(3, 152, 85, 0.3)' }}>
-               Claim ₹{reward} Reward
-            </button>
+            <div style={{ padding: '32px 24px' }}>
+              <div style={{ background: 'linear-gradient(135deg,rgba(16,185,129,0.08),rgba(5,150,105,0.08))', border: '1.5px solid rgba(16,185,129,0.25)', borderRadius: 20, padding: 32, textAlign: 'center', marginBottom: 24, position: 'relative', overflow: 'hidden' }}>
+                <div style={{ position: 'absolute', top: -20, right: -20, width: 120, height: 120, borderRadius: '50%', background: 'rgba(16,185,129,0.1)' }} />
+                <div style={{ position: 'absolute', bottom: -10, left: -10, width: 80, height: 80, borderRadius: '50%', background: 'rgba(16,185,129,0.08)' }} />
+                <div style={{ position: 'relative', zIndex: 1 }}>
+                  <div style={{ background: 'linear-gradient(135deg,#10B981,#059669)', width: 72, height: 72, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 20px', boxShadow: '0 12px 32px rgba(16,185,129,0.35)', animation: 'pulse 2s infinite' }}>
+                    <Check size={36} color="white" strokeWidth={3} />
+                  </div>
+                  <h2 style={{ fontSize: 24, fontWeight: 900, color: 'var(--text-primary)', marginBottom: 12, letterSpacing: '-0.5px' }}>✨ Task Approved!</h2>
+                  <p style={{ fontSize: 15, color: 'var(--text-secondary)', lineHeight: 1.8, marginBottom: 20, fontWeight: 500 }}>
+                    Your submission has been verified and approved successfully.
+                  </p>
+                  <div style={{ background: 'rgba(16,185,129,0.12)', padding: 16, borderRadius: 12, fontSize: 14, color: '#047857', fontWeight: 700, border: '1px solid rgba(16,185,129,0.2)', marginBottom: 12 }}>
+                    💰 You earned <span style={{ fontSize: 20 }}>+₹{taskReward}</span> wallet credit!
+                  </div>
+                  <div style={{ background: 'rgba(255,255,255,0.6)', backdropFilter: 'blur(10px)', padding: 14, borderRadius: 12, fontSize: 13, color: 'var(--text-secondary)', fontWeight: 500, lineHeight: 1.6 }}>
+                    📱 Install and login to the app to cash out real money to your UPI or Bank account. Access 100+ tasks inside.
+                  </div>
+                </div>
+              </div>
+            </div>
           )}
 
+          {/* CLAIMED STATE */}
           {taskState === 'claimed' && (
-            <button className="btn-primary" disabled style={{ background: 'var(--bg-secondary)', color: 'var(--text-secondary)', boxShadow: 'none', border: '1px solid var(--border-color)' }}>
-               <Loader2 size={20} className="animate-spin" /> Processing Payout...
-            </button>
+            <div style={{ padding: '32px 24px', textAlign: 'center' }}>
+              <div style={{ background: 'linear-gradient(135deg,rgba(59,130,246,0.08),rgba(99,102,241,0.08))', border: '1.5px solid rgba(59,130,246,0.2)', borderRadius: 20, padding: 40, position: 'relative', overflow: 'hidden' }}>
+                <div style={{ position: 'absolute', top: -20, right: -20, width: 120, height: 120, borderRadius: '50%', background: 'rgba(59,130,246,0.1)' }} />
+                <div style={{ position: 'relative', zIndex: 1 }}>
+                  <Loader2 size={56} className="animate-spin" style={{ margin: '0 auto 20px', color: '#3B82F6' }} />
+                  <h2 style={{ fontSize: 22, fontWeight: 800, color: 'var(--text-primary)', marginBottom: 8 }}>🎉 Finalizing Your Reward</h2>
+                  <p style={{ fontSize: 14, color: 'var(--text-secondary)', fontWeight: 500 }}>Please wait while we process your payout...</p>
+                </div>
+              </div>
+            </div>
           )}
+
         </div>
 
+        {/* Fixed Action Button */}
+        {(taskState === 'review' || taskState === 'claimed') && (
+          <div style={{ position: 'fixed', bottom: 0, left: 0, right: 0, background: 'linear-gradient(180deg,transparent,var(--bg-primary))', padding: '24px', borderTop: '1.5px solid var(--border-color)', boxShadow: '0 -16px 48px rgba(0,0,0,0.08)' }}>
+            <button
+              onClick={handleClaimReward}
+              disabled={taskState === 'claimed'}
+              style={{
+                width: '100%',
+                background: taskState === 'claimed' ? 'linear-gradient(135deg,#E5E7EB,#D1D5DB)' : 'linear-gradient(135deg,#10B981,#059669)',
+                color: taskState === 'claimed' ? 'var(--text-secondary)' : 'white',
+                border: taskState === 'claimed' ? '1.5px solid var(--border-color)' : 'none',
+                padding: '16px',
+                borderRadius: 14,
+                fontSize: 16,
+                fontWeight: 800,
+                cursor: taskState === 'claimed' ? 'not-allowed' : 'pointer',
+                transition: 'all 0.3s',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 10,
+                boxShadow: taskState === 'claimed' ? 'none' : '0 8px 24px rgba(16,185,129,0.4)',
+              }}
+              onMouseOver={(e) => {
+                if (taskState !== 'claimed') {
+                  e.target.style.transform = 'translateY(-2px)';
+                  e.target.style.boxShadow = '0 12px 32px rgba(16,185,129,0.5)';
+                }
+              }}
+              onMouseOut={(e) => {
+                if (taskState !== 'claimed') {
+                  e.target.style.transform = 'translateY(0)';
+                  e.target.style.boxShadow = '0 8px 24px rgba(16,185,129,0.4)';
+                }
+              }}
+            >
+              {taskState === 'claimed' ? (
+                <><Loader2 size={20} className="animate-spin" /> Processing Reward...</>
+              ) : (
+                <><Zap size={20} /> Claim ₹{taskReward} Reward</>
+              )}
+            </button>
+          </div>
+        )}
+
+        </div>
+        </PageTransition>
       </div>
-    </PageTransition>
+    </div>
   );
 };
 

@@ -36,6 +36,7 @@ const translations = {
     payment_proof: 'Payment Proof',
     payment_proof_sub: 'View payment receipts & history',
     payment_proof_url_missing: 'Payment proof URL is not configured in Firebase',
+    payment_proof_open_failed: 'Could not open payment proof page. Please try again.',
     free_plan: 'Free Plan · 15 tasks/day',
     pro_plan: 'Pro Plan · 50 tasks/day',
 
@@ -150,7 +151,7 @@ const translations = {
     delete_acc_q: '⚠️ Delete Account',
     upgrade_to_pro: '🚀 Upgrade to Pro',
     pro_active: '👑 Pro Plan Active',
-    skillwork_version: 'SkillWork v1.0.0 · Made with ❤️ in India',
+    skillwork_version: '24hrwork v1.0.0 · Made with ❤️ in India',
 
     // ── Analytics ──
     analytics: 'Analytics',
@@ -175,12 +176,12 @@ const translations = {
     badges_remaining: 'badges remaining',
     keep_going: 'Keep Going!',
     all_achieved: 'All Achieved!',
-    legendary_status: 'Legendary status unlocked. You are a SkillWork Master! 🌟',
+    legendary_status: 'Legendary status unlocked. You are a 24hrwork Master! 🌟',
     rarity: 'Rarity:',
 
     // ── General ──
     active: '🟢 Active',
-    skillwork_member: 'SkillWork Member',
+    skillwork_member: '24hrwork Member',
     pro_member: '👑 Pro Member',
     free_plan_badge: '🆓 Free Plan',
   },
@@ -222,6 +223,7 @@ const translations = {
     payment_proof: 'भुगतान प्रमाण',
     payment_proof_sub: 'भुगतान रसीद और इतिहास देखें',
     payment_proof_url_missing: 'Firebase में भुगतान प्रमाण URL कॉन्फ़िग नहीं है',
+    payment_proof_open_failed: 'भुगतान प्रमाण पेज नहीं खुल सका। कृपया फिर से कोशिश करें।',
     free_plan: 'फ्री प्लान · 15 कार्य/दिन',
     pro_plan: 'प्रो प्लान · 50 कार्य/दिन',
 
@@ -336,7 +338,7 @@ const translations = {
     delete_acc_q: '⚠️ खाता हटाएं',
     upgrade_to_pro: '🚀 प्रो में अपग्रेड करें',
     pro_active: '👑 प्रो प्लान सक्रिय',
-    skillwork_version: 'SkillWork v1.0.0 · भारत में ❤️ के साथ बनाया गया',
+    skillwork_version: '24hrwork v1.0.0 · भारत में ❤️ के साथ बनाया गया',
 
     // ── Analytics ──
     analytics: 'विश्लेषण',
@@ -361,12 +363,12 @@ const translations = {
     badges_remaining: 'बैज बाकी हैं',
     keep_going: 'जारी रखें!',
     all_achieved: 'सब हासिल!',
-    legendary_status: 'लेजेंडरी स्टेटस अनलॉक! आप SkillWork मास्टर हैं! 🌟',
+    legendary_status: 'लेजेंडरी स्टेटस अनलॉक! आप 24hrwork मास्टर हैं! 🌟',
     rarity: 'दुर्लभता:',
 
     // ── General ──
     active: '🟢 सक्रिय',
-    skillwork_member: 'SkillWork सदस्य',
+    skillwork_member: '24hrwork सदस्य',
     pro_member: '👑 प्रो सदस्य',
     free_plan_badge: '🆓 फ्री प्लान',
   },

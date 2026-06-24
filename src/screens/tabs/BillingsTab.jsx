@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { DEFAULT_PRO_PRICING } from '../../firebase';
+import AppLogo from '../../components/AppLogo';
 
 /* ─── Inline keyframes injected once ─────────────────────────────────────── */
 const STYLE = `
@@ -31,7 +32,7 @@ const PERKS = [
   { icon: '🚀', title: '3× More Tasks', desc: '50 tasks/day vs 15 on Free — earn 3× more every day' },
   { icon: '⚡', title: 'Instant Payouts', desc: 'Get your money in 24 hrs, not 48. Every rupee, faster.' },
   { icon: '🎯', title: 'Best Tasks First', desc: 'Priority queue — you see high-paying tasks before others' },
-  { icon: '🎁', title: 'Bonus Rewards', desc: 'Exclusive bonus tasks with premium rewards up to ₹500 each' },
+  { icon: '🎁', title: 'Bonus Rewards', desc: 'Exclusive bonus tasks with premium rewards up to ₹600 each' },
 ];
 
 const TESTIMONIALS = [
@@ -296,6 +297,9 @@ const BillingsTab = ({ isPro, onUpgrade, onDowngrade, onNavigateToPayment, proPr
           <div style={{ position: 'absolute', width: 160, height: 160, borderRadius: '50%', background: 'radial-gradient(circle,rgba(0,195,126,0.3) 0%,transparent 70%)', bottom: -40, left: -20 }} />
 
           <div style={{ position: 'relative', zIndex: 1, textAlign: 'center' }}>
+            <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 14 }}>
+              <AppLogo size={48} rounded={12} />
+            </div>
             <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 100, padding: '6px 14px', marginBottom: 14, backdropFilter: 'blur(10px)' }}>
               <span style={{ width: 7, height: 7, borderRadius: '50%', background: isPro ? '#4ade80' : '#94a3b8', display: 'inline-block' }} />
               <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.7)', fontWeight: 600 }}>{isPro ? 'Pro Plan · Active' : 'Free Plan · Active'}</span>

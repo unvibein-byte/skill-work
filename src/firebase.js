@@ -477,7 +477,7 @@ export const DEFAULT_PAYMENT_METHODS = Object.freeze({
 /** Onboarding Telegram channel — document `config/telegram` in Firestore. */
 export const DEFAULT_TELEGRAM_CONFIG = Object.freeze({
   channelUrl: 'https://t.me/skillwork_official',
-  channelName: 'SkillWork Official',
+  channelName: '24hrwork Official',
   memberSubtitle: 'Join our community for proofs & updates',
   bonusLabel: '+₹10',
 });
@@ -500,6 +500,95 @@ export const DEFAULT_PAYMENT_PROOF_CONFIG = Object.freeze({
   proofUrl: 'https://payment.itechvertical.in/',
   pageTitle: 'Payment Proof',
 });
+
+/**
+ * Task tab "How To Work" tutorial (Firestore: `config/how_to_work`).
+ * Set `videoUrl` (YouTube or direct mp4) and/or `pageUrl` (web page). Video takes priority when both are set.
+ */
+export const DEFAULT_HOW_TO_WORK_CONFIG = Object.freeze({
+  videoUrl: 'https://www.youtube.com/watch?v=YOUR_VIDEO_ID',
+  pageUrl: '',
+  pageTitle: 'How To Work',
+});
+
+/** Convert watch/share YouTube links to an embeddable URL. */
+export function toYoutubeEmbedUrl(rawUrl) {
+  if (!rawUrl || typeof rawUrl !== 'string') return null;
+  const url = rawUrl.trim();
+  if (!url) return null;
+  if (url.includes('/embed/')) {
+    return url;
+  }
+  try {
+    const parsed = new URL(url);
+    const host = parsed.hostname.replace(/^www\./, '');
+    if (host === 'youtu.be') {
+      const id = parsed.pathname.replace(/^\//, '').split('/')[0];
+      return id ? `https://www.youtube.com/embed/${id}` : null;
+    }
+    if (host === 'youtube.com' || host === 'm.youtube.com') {
+      const id = parsed.searchParams.get('v');
+      if (id) {
+        return `https://www.youtube.com/embed/${id}`;
+      }
+      const parts = parsed.pathname.split('/').filter(Boolean);
+      const shortsIdx = parts.indexOf('shorts');
+      if (shortsIdx >= 0 && parts[shortsIdx + 1]) {
+        return `https://www.youtube.com/embed/${parts[shortsIdx + 1]}`;
+      }
+    }
+  } catch {
+    return null;
+  }
+  return url.startsWith('http') ? url : null;
+}
+
+export function isDirectVideoUrl(url) {
+  const raw = typeof url === 'string' ? url.trim() : '';
+  return /\.(mp4|webm|ogg)(\?|$)/i.test(raw);
+}
+
+export function normalizeHowToWorkConfig(raw) {
+  const d = raw && typeof raw === 'object' ? raw : {};
+  const videoFrom =
+    typeof d.videoUrl === 'string' && d.videoUrl.trim()
+      ? d.videoUrl.trim()
+      : typeof d.video === 'string' && d.video.trim()
+        ? d.video.trim()
+        : '';
+  const pageFrom =
+    typeof d.pageUrl === 'string' && d.pageUrl.trim().startsWith('http')
+      ? d.pageUrl.trim()
+      : typeof d.url === 'string' && d.url.trim().startsWith('http')
+        ? d.url.trim()
+        : null;
+  const pageTitle =
+    typeof d.pageTitle === 'string' && d.pageTitle.trim()
+      ? d.pageTitle.trim()
+      : DEFAULT_HOW_TO_WORK_CONFIG.pageTitle;
+  const videoUrl = toYoutubeEmbedUrl(videoFrom) || (videoFrom.startsWith('http') ? videoFrom : '');
+  const pageUrl = pageFrom || '';
+  return { videoUrl, pageUrl, pageTitle };
+}
+
+/** Read how-to-work config from Firestore (no automatic writes). */
+export async function getHowToWorkConfig() {
+  if (!isFirebaseConfigured || !db) {
+    return normalizeHowToWorkConfig(null);
+  }
+
+  try {
+    const ref = doc(db, 'config', 'how_to_work');
+    const snap = await getDoc(ref);
+    if (snap.exists()) {
+      return normalizeHowToWorkConfig(snap.data());
+    }
+    return normalizeHowToWorkConfig(DEFAULT_HOW_TO_WORK_CONFIG);
+  } catch (error) {
+    console.error('Failed to get how to work config', error);
+    return normalizeHowToWorkConfig(null);
+  }
+}
 
 export function normalizePaymentProofConfig(raw) {
   const d = raw && typeof raw === 'object' ? raw : {};

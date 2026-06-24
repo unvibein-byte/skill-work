@@ -1,4 +1,4 @@
-/** Same Firebase project as SkillWork app */
+/** Same Firebase project as 24hrwork app */
 window.SKILLWORK_FIREBASE_CONFIG = {
   apiKey: 'AIzaSyAS77O3L7ttzQ-ivVehqODEyu76Uk7vFM0',
   authDomain: 'skillwork-65a18.firebaseapp.com',
